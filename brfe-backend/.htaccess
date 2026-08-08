@@ -1,0 +1,13 @@
+RewriteEngine On
+RewriteBase /bagoevac/brfe-backend/
+
+# Pass Authorization header to PHP (Apache strips it by default)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Allow existing files/dirs to be served directly
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Route everything else to index.php
+RewriteRule ^(.*)$ index.php [QSA,L]

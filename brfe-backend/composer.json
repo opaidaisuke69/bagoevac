@@ -1,0 +1,15 @@
+{
+    "name": "brfe/backend",
+    "description": "BRFE App System — PHP Backend API",
+    "require": {
+        "php": ">=8.1",
+        "cboden/ratchet": "^0.4"
+    },
+    "autoload": {
+        "classmap": [
+            "config/",
+            "services/",
+            "middleware/"
+        ]
+    }
+}
