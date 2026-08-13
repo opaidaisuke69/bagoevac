@@ -32,8 +32,8 @@ if ($msgBody === '') errorValidation(['body' => 'body is required.']);
 if (!in_array($msgType, ['broadcast', 'announcement'], true)) {
     errorValidation(['msg_type' => 'msg_type must be broadcast or announcement.']);
 }
-// Only LGU_Admin can send announcements
-if ($msgType === 'announcement' && $role !== 'LGU_Admin') {
+// Only LGU_Admin can send announcements city-wide; Barangay_Official can send announcements to their own barangay
+if ($msgType === 'announcement' && $role !== 'LGU_Admin' && $role !== 'Barangay_Official') {
     errorForbidden();
 }
 
@@ -49,12 +49,19 @@ $now = date('Y-m-d H:i:s');
 
 // Determine target evacuees
 if ($role === 'LGU_Admin') {
-    $stmt = $pdo->query('SELECT id FROM users WHERE token_hash IS NOT NULL');
-    $targetBarangayId = null;
+    $targetBarangayId = isset($body['barangay_id']) ? (int)$body['barangay_id'] : null;
+    if ($targetBarangayId) {
+        // Target specific barangay
+        $stmt = $pdo->prepare('SELECT id FROM users WHERE barangay_id = ?');
+        $stmt->execute([$targetBarangayId]);
+    } else {
+        // City-wide: all evacuees
+        $stmt = $pdo->query('SELECT id FROM users');
+    }
 } else {
     // Barangay_Official — scope to their barangay
     if (!$senderBarangayId) errorForbidden();
-    $stmt = $pdo->prepare('SELECT id FROM users WHERE token_hash IS NOT NULL AND barangay_id = ?');
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE barangay_id = ?');
     $stmt->execute([$senderBarangayId]);
     $targetBarangayId = $senderBarangayId;
 }

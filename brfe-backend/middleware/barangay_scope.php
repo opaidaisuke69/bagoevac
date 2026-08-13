@@ -1,9 +1,9 @@
 <?php
 /**
  * Barangay scope middleware.
- * Adds barangay_id filtering to queries when the logged-in user
- * is a Barangay_Official (limits visibility to their own barangay).
  */
+
+require_once __DIR__ . '/lgu_auth.php';
 
 function getBarangayScope(): ?int
 {
@@ -15,4 +15,15 @@ function getBarangayScope(): ?int
 
     // Barangay_Official is scoped
     return isset($user['barangay_id']) ? (int)$user['barangay_id'] : null;
+}
+
+
+// Legacy compatibility wrapper — old files use this pattern
+function getBarangayScopeClause(string $tableAlias = 'u'): array
+{
+    $scope = getBarangayScope();
+    if ($scope === null) {
+        return ['clause' => '', 'params' => []];
+    }
+    return ['clause' => "AND {$tableAlias}.barangay_id = ?", 'params' => [$scope]];
 }

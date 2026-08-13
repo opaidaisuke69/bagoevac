@@ -12,6 +12,8 @@ const queryClient = new QueryClient({
       staleTime: 3000,
       refetchInterval: 3000, // realtime polling every 3 seconds
       retry: 1,
+      refetchOnWindowFocus: false, // don't refetch on tab switch (prevents page flash)
+      structuralSharing: true, // prevent re-renders if data hasn't changed
     },
   },
 });

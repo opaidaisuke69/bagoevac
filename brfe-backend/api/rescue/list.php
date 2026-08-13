@@ -31,8 +31,8 @@ $pdo    = Database::getInstance();
 $where  = [];
 $params = [];
 
-if (in_array($role, $lguRoles, true)) {
-    // LGU sees all requests
+if (in_array($role, $lguRoles, true) || $role === 'Rescuer') {
+    // LGU / Rescuer sees all requests (rescuer needs to see pending/ongoing to navigate)
     if ($statusFilter !== null) {
         $where[]  = 'rr.req_status = ?';
         $params[] = $statusFilter;
@@ -53,9 +53,13 @@ $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $sql = "SELECT rr.id, rr.user_id, rr.lat, rr.lng, rr.status_at_request,
                rr.req_status, rr.responder_id, rr.requested_at, rr.completed_at,
-               u.avatar_path, u.full_name, u.status AS user_status
+               u.avatar_path, u.full_name, u.status AS user_status, u.contact_no,
+               b.name AS barangay_name,
+               l.lat AS current_lat, l.lng AS current_lng, l.recorded_at AS last_location_at
         FROM rescue_requests rr
         LEFT JOIN users u ON u.id = rr.user_id
+        LEFT JOIN barangays b ON b.id = u.barangay_id
+        LEFT JOIN locations l ON l.user_id = u.id
         {$whereClause}
         ORDER BY rr.requested_at ASC";
 
@@ -71,6 +75,13 @@ foreach ($requests as &$req) {
     $req['lat']          = (float)$req['lat'];
     $req['lng']          = (float)$req['lng'];
     $req['responder_id'] = $req['responder_id'] !== null ? (int)$req['responder_id'] : null;
+    // Current location from locations table (live or last known)
+    $req['current_lat']  = $req['current_lat'] !== null ? (float)$req['current_lat'] : null;
+    $req['current_lng']  = $req['current_lng'] !== null ? (float)$req['current_lng'] : null;
+    // Best available location: current > request location
+    $req['best_lat'] = $req['current_lat'] ?? $req['lat'];
+    $req['best_lng'] = $req['current_lng'] ?? $req['lng'];
+    $req['is_online'] = ($req['last_location_at'] !== null && (time() - strtotime($req['last_location_at'])) < 300);
 }
 unset($req);
 

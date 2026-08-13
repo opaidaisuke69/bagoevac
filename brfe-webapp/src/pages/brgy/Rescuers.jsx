@@ -22,8 +22,8 @@ export default function BrgyRescuers() {
       });
       return data.data || [];
     },
-    retry: false,          // Don't retry on failure
-    refetchInterval: 3000, // Only poll every 30s (not 3s) — rescuer list rarely changes
+    retry: false,
+    refetchInterval: 30000, // rescuer list rarely changes
   });
 
   const createMutation = useMutation({

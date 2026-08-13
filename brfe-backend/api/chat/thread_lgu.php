@@ -23,20 +23,46 @@ if ($method === 'GET') {
     if ($feed) {
         // Return broadcast/announcement feed visible to this LGU account
         $now = date('Y-m-d H:i:s');
-        $stmt = $pdo->prepare(
-            "SELECT cm.id, cm.sender_type, cm.sender_id, cm.body, cm.msg_type,
-                    cm.expires_at, cm.barangay_id, cm.sent_at,
-                    la.username AS sender_name, la.role AS sender_role,
-                    b.name AS sender_barangay
-             FROM chat_messages cm
-             LEFT JOIN lgu_accounts la ON la.id = cm.sender_id AND cm.sender_type = 'lgu'
-             LEFT JOIN barangays b ON b.id = la.barangay_id
-             WHERE cm.msg_type IN ('broadcast','announcement')
-               AND (cm.expires_at IS NULL OR cm.expires_at > ?)
-             ORDER BY cm.sent_at DESC
-             LIMIT 100"
-        );
-        $stmt->execute([$now]);
+        $myBarangayId = isset($lgu['barangay_id']) ? (int)$lgu['barangay_id'] : 0;
+        $isAdmin = ($lgu['role'] === 'LGU_Admin');
+
+        if ($isAdmin) {
+            // LGU Admin sees all broadcasts/announcements
+            $stmt = $pdo->prepare(
+                "SELECT cm.id, cm.sender_type, cm.sender_id, cm.body, cm.msg_type,
+                        cm.expires_at, cm.barangay_id, cm.sent_at,
+                        la.username AS sender_name, la.role AS sender_role,
+                        b.name AS sender_barangay
+                 FROM chat_messages cm
+                 LEFT JOIN lgu_accounts la ON la.id = cm.sender_id AND cm.sender_type = 'lgu'
+                 LEFT JOIN barangays b ON b.id = la.barangay_id
+                 WHERE cm.msg_type IN ('broadcast','announcement')
+                   AND (cm.expires_at IS NULL OR cm.expires_at > ?)
+                 GROUP BY cm.body, cm.sender_id, cm.msg_type, cm.sent_at
+                 ORDER BY cm.sent_at DESC
+                 LIMIT 100"
+            );
+            $stmt->execute([$now]);
+        } else {
+            // Barangay Official sees only their own barangay's broadcasts + city-wide (barangay_id IS NULL)
+            $stmt = $pdo->prepare(
+                "SELECT cm.id, cm.sender_type, cm.sender_id, cm.body, cm.msg_type,
+                        cm.expires_at, cm.barangay_id, cm.sent_at,
+                        la.username AS sender_name, la.role AS sender_role,
+                        b.name AS sender_barangay
+                 FROM chat_messages cm
+                 LEFT JOIN lgu_accounts la ON la.id = cm.sender_id AND cm.sender_type = 'lgu'
+                 LEFT JOIN barangays b ON b.id = la.barangay_id
+                 WHERE cm.msg_type IN ('broadcast','announcement')
+                   AND (cm.expires_at IS NULL OR cm.expires_at > ?)
+                   AND (cm.barangay_id = ? OR cm.barangay_id IS NULL)
+                 GROUP BY cm.body, cm.sender_id, cm.msg_type, cm.sent_at
+                 ORDER BY cm.sent_at DESC
+                 LIMIT 100"
+            );
+            $stmt->execute([$now, $myBarangayId]);
+        }
+
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) { $r['id'] = (int)$r['id']; }
         unset($r);

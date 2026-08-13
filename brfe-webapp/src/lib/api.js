@@ -17,13 +17,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 → logout
+// Handle 401 → logout (but NOT on login endpoints)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
+      const url = err.config?.url || '';
+      // Don't redirect if this IS the login request
+      if (!url.includes('/login')) {
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

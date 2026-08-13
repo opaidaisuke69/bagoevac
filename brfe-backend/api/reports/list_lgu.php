@@ -1,22 +1,26 @@
 <?php
-/** GET /api/reports/list_lgu — List disaster reports for LGU web panel (session auth). */
+/** GET /api/reports/list_lgu — List disaster reports for LGU web panel. */
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../api/response.php';
-require_once __DIR__ . '/../../middleware/barangay_scope.php'; // also loads lgu_auth
+require_once __DIR__ . '/../../middleware/barangay_scope.php';
 
 header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') { http_response_code(405); exit; }
+
 requireLguAuth();
 
 $pdo    = Database::getInstance();
 $where  = ['1=1'];
 $params = [];
 
-// Barangay scoping — Barangay_Official locked to their barangay
-$scope = getBarangayScopeClause('u');
-if ($scope['clause'] !== '') {
-    $where[]  = ltrim($scope['clause'], 'AND ');
-    $params   = array_merge($params, $scope['params']);
+// Barangay scoping
+$scope = getBarangayScope();
+if ($scope !== null) {
+    $where[]  = 'u.barangay_id = ?';
+    $params[] = $scope;
 } elseif (!empty($_GET['barangay_id'])) {
     $where[]  = 'u.barangay_id = ?';
     $params[] = (int)$_GET['barangay_id'];

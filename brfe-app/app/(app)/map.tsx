@@ -158,14 +158,10 @@ export default function MapScreen() {
       const data = await res.json();
       if (data.error) return;
       const rescues: any[] = data.rescue_requests ?? data.data ?? (Array.isArray(data) ? data : []);
+      // Don't show rescue markers for active/pending rescues (rescuer 🚒 marker handles that)
       sendToMap({
         type: "update_rescues",
-        rescues: rescues.map((r) => ({
-          id: r.id, lat: parseFloat(r.lat), lng: parseFloat(r.lng), req_status: r.req_status,
-          avatar: r.avatar_path ? `${API_BASE_URL}/${r.avatar_path}` : null,
-          user_status: r.user_status ?? null,
-          full_name: r.full_name ?? null,
-        })),
+        rescues: [],
       });
     } catch { /* non-fatal */ }
   }, [sendToMap]);
@@ -281,12 +277,61 @@ export default function MapScreen() {
     return () => busOff("status_change", onStatusChange);
   }, [sendToMap]);
 
-  // Once map is ready: flush queue + load centers + rescues
+  // Once map is ready: flush queue + load centers + rescues + boundaries
   useEffect(() => {
     if (!mapReady) return;
     fetchCenters();
     fetchRescues();
-  }, [mapReady, fetchCenters, fetchRescues]);
+    // Send barangay boundaries for colored polygon rendering
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { BARANGAY_BOUNDARIES } = require("../../constants/barangayBoundaries");
+    sendToMap({
+      type: "update_boundaries",
+      boundaries: BARANGAY_BOUNDARIES.map((b: any) => ({
+        name: b.name,
+        color: b.color,
+        coords: b.coords,
+      })),
+    });
+  }, [mapReady, fetchCenters, fetchRescues, sendToMap]);
+
+  // Track assigned rescuer location (Grab-style: evacuee sees rescuer coming)
+  useEffect(() => {
+    if (!mapReady || !userId) return;
+    let active = true;
+    const pollRescuer = async () => {
+      try {
+        const token = await getToken();
+        // Find my ongoing rescue request
+        const res = await fetch(`${API_BASE_URL}/api/rescue/list`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        const rescues = data.rescue_requests ?? data.data ?? [];
+        const ongoing = rescues.find((r: any) => r.req_status === "Ongoing" && r.user_id === userId);
+        if (!ongoing) {
+          sendToMap({ type: "update_rescuer_location", rescuer: null });
+          return;
+        }
+        // Fetch rescuer location
+        const locRes = await fetch(`${API_BASE_URL}/api/rescue/location?rescue_id=${ongoing.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const locData = await locRes.json();
+        if (locData.rescuer) {
+          sendToMap({
+            type: "update_rescuer_location",
+            rescuer: { lat: locData.rescuer.lat, lng: locData.rescuer.lng, name: locData.rescuer.name },
+          });
+        } else {
+          sendToMap({ type: "update_rescuer_location", rescuer: null });
+        }
+      } catch {}
+    };
+    pollRescuer();
+    const interval = setInterval(() => { if (active) pollRescuer(); }, 3000);
+    return () => { active = false; clearInterval(interval); };
+  }, [mapReady, userId, sendToMap]);
 
   async function handleWebViewMessage(event: WebViewMessageEvent) {
     try {

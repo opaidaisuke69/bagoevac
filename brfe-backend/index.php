@@ -40,7 +40,8 @@ $routes = [
     '/api/users/change_password' => __DIR__ . '/api/users/change_password.php',
 
     // Barangays
-    '/api/barangays/list'  => __DIR__ . '/api/barangays/list.php',
+    '/api/barangays/list'    => __DIR__ . '/api/barangays/list.php',
+    '/api/barangays/profile' => __DIR__ . '/api/barangays/profile.php',
 
     // Locations
     '/api/locations/post'    => __DIR__ . '/api/locations/post.php',
@@ -57,6 +58,7 @@ $routes = [
     '/api/rescue/list_lgu'   => __DIR__ . '/api/rescue/list_lgu.php',
     '/api/rescue/update'     => __DIR__ . '/api/rescue/update.php',
     '/api/rescue/update_lgu' => __DIR__ . '/api/rescue/update_lgu.php',
+    '/api/rescue/location'   => __DIR__ . '/api/rescue/location.php',
 
     // Centers
     '/api/centers/list'      => __DIR__ . '/api/centers/list.php',

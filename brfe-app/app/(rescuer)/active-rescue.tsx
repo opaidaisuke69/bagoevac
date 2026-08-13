@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, StatusBar, ScrollView,
@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { API_BASE_URL } from "../../constants/config";
 import { getToken } from "../../hooks/use-auth";
+import * as GpsTracker from "../../services/gps-tracker";
 
 type ActiveRescue = {
   id: number;
@@ -31,6 +32,8 @@ export default function ActiveRescueScreen() {
   const [rescue, setRescue] = useState<ActiveRescue | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [localStep, setLocalStep] = useState<string>("Ongoing"); // visual progress
+  const gpsInterval = useRef<any>(null);
 
   const fetchActive = useCallback(async () => {
     try {
@@ -40,44 +43,85 @@ export default function ActiveRescueScreen() {
       });
       const data = await res.json();
       const list = data.data || [];
-      setRescue(list.length > 0 ? list[0] : null);
+      if (list.length > 0) {
+        setRescue(list[0]);
+        // Keep localStep in sync if rescue is still Ongoing
+        if (localStep === "Completed") setLocalStep("Ongoing");
+      } else {
+        setRescue(null);
+      }
     } catch { /* silent */ }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     fetchActive();
-    const interval = setInterval(fetchActive, 3000);
+    const interval = setInterval(fetchActive, 5000);
     return () => clearInterval(interval);
   }, [fetchActive]);
 
-  async function updateStatus(newStatus: string) {
+  // Post rescuer GPS while on the way or arrived
+  useEffect(() => {
+    if (!rescue || (localStep !== "On_the_way" && localStep !== "Arrived")) {
+      if (gpsInterval.current) { clearInterval(gpsInterval.current); gpsInterval.current = null; }
+      return;
+    }
+    const postLocation = async () => {
+      const coords = GpsTracker.getLastCoords();
+      if (!coords) return;
+      try {
+        const token = await getToken();
+        await fetch(`${API_BASE_URL}/api/rescue/location`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude, rescue_id: rescue.id }),
+        });
+      } catch {}
+    };
+    postLocation();
+    gpsInterval.current = setInterval(postLocation, 3000);
+    return () => { if (gpsInterval.current) clearInterval(gpsInterval.current); };
+  }, [localStep, rescue]);
+
+  async function handleNextStep() {
     if (!rescue) return;
-    setUpdating(true);
-    try {
-      const token = await getToken();
-      await fetch(`${API_BASE_URL}/api/rescue/update_lgu`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: rescue.id, req_status: newStatus }),
-      });
-      if (newStatus === "Completed") {
+
+    if (localStep === "Ongoing") {
+      // "I'm on the Way" — just update local visual step, start GPS posting
+      setLocalStep("On_the_way");
+      return;
+    }
+
+    if (localStep === "On_the_way") {
+      // "I've Arrived" — just update local visual step
+      setLocalStep("Arrived");
+      return;
+    }
+
+    if (localStep === "Arrived") {
+      // "Rescue Completed" — call the actual API
+      setUpdating(true);
+      try {
+        const token = await getToken();
+        await fetch(`${API_BASE_URL}/api/rescue/update_lgu`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ id: rescue.id, req_status: "Completed" }),
+        });
         setRescue(null);
+        setLocalStep("Ongoing");
         Alert.alert("✅ Rescue Completed", "Great work! The evacuee has been rescued.");
-      } else {
-        fetchActive();
-      }
-    } catch {
-      Alert.alert("Error", "Failed to update status");
-    } finally { setUpdating(false); }
+      } catch {
+        Alert.alert("Error", "Failed to complete rescue");
+      } finally { setUpdating(false); }
+      return;
+    }
   }
 
-  function getNextStatus(): { key: string; label: string } | null {
-    if (!rescue) return null;
-    const current = rescue.req_status;
-    if (current === "Ongoing") return { key: "On_the_way", label: "I'm On the Way" };
-    if (current === "On_the_way") return { key: "Arrived", label: "I've Arrived" };
-    if (current === "Arrived") return { key: "Completed", label: "Rescue Completed" };
+  function getNextLabel(): string | null {
+    if (localStep === "Ongoing") return "🚒 I'm On the Way";
+    if (localStep === "On_the_way") return "📍 I've Arrived";
+    if (localStep === "Arrived") return "✅ Rescue Completed";
     return null;
   }
 
@@ -105,8 +149,8 @@ export default function ActiveRescueScreen() {
     );
   }
 
-  const nextStatus = getNextStatus();
-  const currentStepIdx = STATUS_STEPS.findIndex((s) => s.key === rescue.req_status);
+  const nextLabel = getNextLabel();
+  const currentStepIdx = STATUS_STEPS.findIndex((s) => s.key === localStep);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -158,10 +202,10 @@ export default function ActiveRescueScreen() {
         </View>
 
         {/* Next action button */}
-        {nextStatus && (
+        {nextLabel && (
           <TouchableOpacity
             style={[styles.actionBtn, updating && styles.actionBtnDisabled]}
-            onPress={() => updateStatus(nextStatus.key)}
+            onPress={handleNextStep}
             disabled={updating}
           >
             {updating ? (
@@ -169,7 +213,7 @@ export default function ActiveRescueScreen() {
             ) : (
               <>
                 <Ionicons name="arrow-forward-circle" size={20} color="#fff" />
-                <Text style={styles.actionBtnText}>{nextStatus.label}</Text>
+                <Text style={styles.actionBtnText}>{nextLabel}</Text>
               </>
             )}
           </TouchableOpacity>

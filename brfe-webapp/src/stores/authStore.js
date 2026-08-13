@@ -5,7 +5,7 @@ export const useAuthStore = create(
   persist(
     (set) => ({
       token: null,
-      user: null, // { id, username, role, barangay_id }
+      user: null, // { user_id, username, role, barangay_id, barangay_name }
       login: (token, user) => set({ token, user }),
       logout: () => set({ token: null, user: null }),
     }),

@@ -3,10 +3,11 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, LifeBuoy, Building2,
   BarChart3, MessageCircle, LogOut, Menu, PanelLeftClose, PanelLeft,
-  Waves, Shield, Megaphone, UserPlus, Eye,
+  Shield, Megaphone, UserPlus, Eye,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { cn } from '../lib/utils';
+import logoImg from '../assets/images/logo.png';
 
 // LGU Admin navigation — categorized
 const lguNavSections = [
@@ -64,7 +65,7 @@ const brgyNavSections = [
   {
     label: 'Communication',
     items: [
-      { to: '/brgy/chat', icon: MessageCircle, label: 'Chat' },
+      { to: '/brgy/chat', icon: MessageCircle, label: 'Broadcasts' },
     ],
   },
 ];
@@ -105,14 +106,14 @@ export default function DashboardLayout() {
         <div className={cn('h-16 flex items-center border-b border-slate-800/60', collapsed ? 'justify-center px-2' : 'justify-between px-4')}>
           {/* Logo — only show icon when collapsed */}
           {collapsed ? (
-            <div className={cn('w-8 h-8 rounded-md flex items-center justify-center', isLgu ? 'bg-blue-600' : 'bg-emerald-600')}>
-              <Waves size={16} className="text-white" />
+            <div className="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-white/10">
+              <img src={logoImg} alt="BRFE" className="w-full h-full object-contain" />
             </div>
           ) : (
             <>
               <div className="flex items-center gap-2.5">
-                <div className={cn('w-8 h-8 rounded-md flex items-center justify-center shrink-0', isLgu ? 'bg-blue-600' : 'bg-emerald-600')}>
-                  <Waves size={16} className="text-white" />
+                <div className="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-white/10">
+                  <img src={logoImg} alt="BRFE" className="w-full h-full object-contain" />
                 </div>
                 <div>
                   <p className="text-[13px] font-semibold text-white leading-none">BRFE</p>

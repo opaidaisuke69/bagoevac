@@ -83,8 +83,8 @@ export async function start(): Promise<void> {
   subscription = await Location.watchPositionAsync(
     {
       accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 500,       // fire every 500ms
-      distanceInterval: 0,     // fire on time, not just distance
+      timeInterval: 2000,      // fire every 2 seconds (reduced from 500ms to cut noise)
+      distanceInterval: 5,     // only fire if moved at least 5 meters
     },
     (location: Location.LocationObject) => {
       const coords: Coords = {
@@ -92,6 +92,8 @@ export async function start(): Promise<void> {
         longitude: location.coords.longitude,
         accuracy: location.coords.accuracy,
       };
+      // Discard readings with poor accuracy (> 30 meters)
+      if (coords.accuracy && coords.accuracy > 30) return;
       lastCoords = coords;
       notifyCallbacks({ coords, unavailable: false });
       postLocation(coords); // upsert — server handles insert vs update

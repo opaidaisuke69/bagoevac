@@ -149,7 +149,8 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.rescuerLink} onPress={() => router.push('/(auth)/rescuer-login')}>
-          <Text style={styles.rescuerLinkText}>🛟 Login as Rescuer</Text>
+          <Ionicons name="shield-checkmark" size={16} color="#FFC349" />
+          <Text style={styles.rescuerLinkText}>Login as Rescuer</Text>
         </TouchableOpacity>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -179,6 +180,6 @@ const styles = StyleSheet.create({
   registerLink:     { alignItems: 'center' },
   registerLinkText: { fontSize: 14, color: '#6b7280' },
   registerLinkBold: { color: '#2563eb', fontWeight: '700' },
-  rescuerLink:      { alignItems: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  rescuerLinkText:  { fontSize: 14, color: '#0d9488', fontWeight: '700' },
+  rescuerLink:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  rescuerLinkText:  { fontSize: 14, color: '#133458', fontWeight: '700' },
 });

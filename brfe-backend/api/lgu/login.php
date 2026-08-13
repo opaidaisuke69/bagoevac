@@ -20,8 +20,10 @@ if ($username === '' || $password === '') {
 
 $pdo = Database::getInstance();
 $stmt = $pdo->prepare(
-    'SELECT id, username, password_hash, role, barangay_id
-     FROM lgu_accounts WHERE username = ? LIMIT 1'
+    'SELECT a.id, a.username, a.password_hash, a.role, a.barangay_id, b.name AS barangay_name
+     FROM lgu_accounts a
+     LEFT JOIN barangays b ON b.id = a.barangay_id
+     WHERE a.username = ? LIMIT 1'
 );
 $stmt->execute([$username]);
 $account = $stmt->fetch();
@@ -31,10 +33,11 @@ if (!$account || !password_verify($password, $account['password_hash'])) {
 }
 
 $tokenPayload = [
-    'user_id'     => (int)$account['id'],
-    'username'    => $account['username'],
-    'role'        => $account['role'],
-    'barangay_id' => $account['barangay_id'] !== null ? (int)$account['barangay_id'] : null,
+    'user_id'       => (int)$account['id'],
+    'username'      => $account['username'],
+    'role'          => $account['role'],
+    'barangay_id'   => $account['barangay_id'] !== null ? (int)$account['barangay_id'] : null,
+    'barangay_name' => $account['barangay_name'] ?? null,
 ];
 
 $token = JwtService::encode($tokenPayload);

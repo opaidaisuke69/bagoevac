@@ -1,0 +1,25 @@
+-- Update barangay coordinates to actual Barangay Hall locations
+UPDATE barangays SET latitude = 10.525348, longitude = 122.992381 WHERE name = 'Abuanan';
+UPDATE barangays SET latitude = 10.473141, longitude = 122.930246 WHERE name = 'Alianza';
+UPDATE barangays SET latitude = 10.511460, longitude = 122.955350 WHERE name = 'Atipuluan';
+UPDATE barangays SET latitude = 10.518851, longitude = 123.034313 WHERE name = 'Bacong-Montilla';
+UPDATE barangays SET latitude = 10.476942, longitude = 122.872296 WHERE name = 'Bagroy';
+UPDATE barangays SET latitude = 10.532732, longitude = 122.842850 WHERE name = 'Balingasag';
+UPDATE barangays SET latitude = 10.457272, longitude = 123.007070 WHERE name = 'Binubuhan';
+UPDATE barangays SET latitude = 10.536833, longitude = 122.888264 WHERE name = 'Busay';
+UPDATE barangays SET latitude = 10.559610, longitude = 122.876397 WHERE name = 'Calumangan';
+UPDATE barangays SET latitude = 10.481850, longitude = 122.905801 WHERE name = 'Caridad';
+UPDATE barangays SET latitude = 10.548719, longitude = 122.951530 WHERE name = 'Dulao';
+UPDATE barangays SET latitude = 10.454040, longitude = 123.051053 WHERE name = 'Ilijan';
+UPDATE barangays SET latitude = 10.476058, longitude = 122.945884 WHERE name = 'Jorge L. Araneta';
+UPDATE barangays SET latitude = 10.530152, longitude = 122.838610 WHERE name = 'Lag-Asan';
+UPDATE barangays SET latitude = 10.489306, longitude = 122.990125 WHERE name = 'Ma-ao Barrio';
+UPDATE barangays SET latitude = 10.461599, longitude = 123.049324 WHERE name = 'Mailum';
+UPDATE barangays SET latitude = 10.493705, longitude = 122.917898 WHERE name = 'Malingin';
+UPDATE barangays SET latitude = 10.512650, longitude = 122.897945 WHERE name = 'Napoles';
+UPDATE barangays SET latitude = 10.495584, longitude = 122.868219 WHERE name = 'Pacol';
+UPDATE barangays SET latitude = 10.540239, longitude = 122.836382 WHERE name = 'Poblacion';
+UPDATE barangays SET latitude = 10.470820, longitude = 122.892302 WHERE name = 'Sagasa';
+UPDATE barangays SET latitude = 10.543128, longitude = 122.851652 WHERE name = 'Sampinit';
+UPDATE barangays SET latitude = 10.576290, longitude = 122.936989 WHERE name = 'Tabunan';
+UPDATE barangays SET latitude = 10.586904, longitude = 122.909612 WHERE name = 'Taloc';

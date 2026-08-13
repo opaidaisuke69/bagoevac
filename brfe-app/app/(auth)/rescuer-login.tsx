@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar, Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,7 +30,6 @@ export default function RescuerLoginScreen() {
       });
       const data = await res.json();
       if (data.error) { setError(data.message ?? 'Invalid credentials.'); return; }
-      // Verify this is a Rescuer account
       if (data.user?.role !== 'Rescuer') {
         setError('This account is not a Rescuer account.');
         return;
@@ -47,28 +46,27 @@ export default function RescuerLoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <StatusBar barStyle="light-content" backgroundColor="#0d4f4f" />
+      <StatusBar barStyle="light-content" backgroundColor="#133458" />
 
       <View style={styles.hero}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="shield-checkmark" size={48} color="#fff" />
+        <View style={styles.logoCircle}>
+          <Image source={require('../../assets/images/logo.png')} style={styles.logo} />
         </View>
-        <Text style={styles.heroTitle}>Rescuer Login</Text>
-        <Text style={styles.heroSub}>Bago City Flood Response Team</Text>
+        <Text style={styles.heroTitle}>B R F E</Text>
+        <Text style={styles.heroSub}>R E S C U E R</Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Sign In</Text>
-        <Text style={styles.cardSub}>Use credentials from your Barangay Admin</Text>
+<Text style={[styles.cardTitle, { textAlign: 'center' }]}>Rescuer Sign In</Text>
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Username</Text>
           <View style={styles.inputWrap}>
-            <Ionicons name="person-outline" size={16} color="#9ca3af" style={styles.inputIcon} />
+            <Ionicons name="person-outline" size={16} color="#94a3b8" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
               placeholder="Enter username"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#94a3b8"
               autoCapitalize="none"
               autoCorrect={false}
               value={username}
@@ -80,17 +78,17 @@ export default function RescuerLoginScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputWrap}>
-            <Ionicons name="lock-closed-outline" size={16} color="#9ca3af" style={styles.inputIcon} />
+            <Ionicons name="lock-closed-outline" size={16} color="#94a3b8" style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { flex: 1 }]}
               placeholder="Enter password"
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor="#94a3b8"
               secureTextEntry={!showPass}
               value={password}
               onChangeText={setPassword}
             />
             <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass(!showPass)}>
-              <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9ca3af" />
+              <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={18} color="#94a3b8" />
             </TouchableOpacity>
           </View>
         </View>
@@ -98,11 +96,13 @@ export default function RescuerLoginScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In as Rescuer</Text>}
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
         </TouchableOpacity>
 
+        <Text style={styles.description}>Bago Residents Flood Evacuees Rescuer</Text>
+
         <TouchableOpacity style={styles.backLink} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={16} color="#6b7280" />
+          <Ionicons name="person" size={16} color="#133458" />
           <Text style={styles.backLinkText}>Back to Evacuee Login</Text>
         </TouchableOpacity>
       </View>
@@ -111,24 +111,26 @@ export default function RescuerLoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: '#0d4f4f' },
+  container:      { flex: 1, backgroundColor: '#133458' },
   hero:           { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 40 },
-  iconCircle:     { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  heroTitle:      { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: 1, marginBottom: 6 },
-  heroSub:        { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+  logoCircle:     { width: 200, height: 200, borderRadius: 100, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 16, elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 },
+  logo:           { width: 160, height: 160, resizeMode: 'contain' },
+  heroTitle:      { fontSize: 30, fontWeight: '900', color: '#FFC349', letterSpacing: 2, marginBottom: 2 },
+  heroSub:        { fontSize: 16, fontWeight: '700', color: '#fff', letterSpacing: 1 },
   card:           { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 40, elevation: 20, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20 },
-  cardTitle:      { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 4 },
-  cardSub:        { fontSize: 13, color: '#6b7280', marginBottom: 24 },
+  cardTitle:      { fontSize: 20, fontWeight: '800', color: '#133458', marginBottom: 4 },
+  cardSub:        { fontSize: 12, color: '#6b7280', marginBottom: 24 },
   inputGroup:     { marginBottom: 16 },
-  label:          { fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 },
-  inputWrap:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12 },
+  label:          { fontSize: 12, fontWeight: '600', color: '#133458', marginBottom: 6 },
+  inputWrap:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12 },
   inputIcon:      { marginLeft: 12 },
-  input:          { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 15, color: '#111827' },
+  input:          { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 14, color: '#1e293b' },
   eyeBtn:         { padding: 10 },
-  error:          { color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center', fontWeight: '500' },
-  button:         { backgroundColor: '#0d9488', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 4, marginBottom: 16, elevation: 3 },
-  buttonDisabled: { backgroundColor: '#99f6e4', elevation: 0 },
-  buttonText:     { color: '#fff', fontSize: 16, fontWeight: '800' },
-  backLink:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  backLinkText:   { fontSize: 14, color: '#6b7280' },
+  error:          { color: '#C62828', fontSize: 12, marginBottom: 12, textAlign: 'center', fontWeight: '500' },
+  button:         { backgroundColor: '#133458', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4, marginBottom: 16, elevation: 3 },
+  buttonDisabled: { backgroundColor: '#133458', opacity: 0.5, elevation: 0 },
+  buttonText:     { color: '#fff', fontSize: 15, fontWeight: '800' },
+  description:    { color: '#94a3b8', fontSize: 11, textAlign: 'center', marginTop: 14, marginBottom: 10 },
+  backLink:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  backLinkText:   { fontSize: 13, color: '#133458', fontWeight: '600' },
 });
