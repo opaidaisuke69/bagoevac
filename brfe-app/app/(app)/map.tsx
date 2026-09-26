@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, StatusBar, TouchableOpacity,
-  FlatList, ActivityIndicator, Modal, Alert,
+  FlatList, ActivityIndicator, Modal, Alert, Linking, Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
@@ -12,6 +12,7 @@ import { on as busOn, off as busOff } from "../../services/event-bus";
 import { getToken } from "../../hooks/use-auth";
 import * as GpsTracker from "../../services/gps-tracker";
 import * as WsClient from "../../services/websocket-client";
+import { getBarangayAtPoint, isInsideBarangay } from "../../services/geo";
 interface NearestCenter {
   id: number; name: string; address: string;
   lat: number; lng: number;
@@ -52,6 +53,48 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
   } catch { return null; }
 }
 
+/**
+ * Opens the native Google Maps app with turn-by-turn directions from the user's
+ * current location to the destination pin. Falls back to the browser/universal
+ * Google Maps URL if the app isn't installed.
+ */
+async function openGoogleMapsDirections(destLat: number, destLng: number, label?: string) {
+  const dest = `${destLat},${destLng}`;
+  const origin = GpsTracker.getLastCoords();
+
+  // Universal HTTPS link — always opens Google Maps (app if installed, else web)
+  // and routes from the device's current location to the destination.
+  const originParam = origin ? `&origin=${origin.latitude},${origin.longitude}` : "";
+  const webUrl =
+    `https://www.google.com/maps/dir/?api=1${originParam}` +
+    `&destination=${dest}&travelmode=driving&dir_action=navigate`;
+
+  // Platform-native deep links for a smoother hand-off to turn-by-turn nav.
+  const androidNav = `google.navigation:q=${dest}&mode=d`;
+  const iosGoogle = origin
+    ? `comgooglemaps://?saddr=${origin.latitude},${origin.longitude}&daddr=${dest}&directionsmode=driving`
+    : `comgooglemaps://?daddr=${dest}&directionsmode=driving`;
+
+  try {
+    if (Platform.OS === "android") {
+      await Linking.openURL(androidNav);
+      return;
+    }
+    if (Platform.OS === "ios") {
+      const canGoogle = await Linking.canOpenURL("comgooglemaps://");
+      await Linking.openURL(canGoogle ? iosGoogle : webUrl);
+      return;
+    }
+    await Linking.openURL(webUrl);
+  } catch {
+    // Last-resort fallback to the universal link.
+    try { await Linking.openURL(webUrl); }
+    catch {
+      Alert.alert("Cannot open Maps", `Unable to open Google Maps for ${label ?? "this location"}.`);
+    }
+  }
+}
+
 export default function MapScreen() {
   const webViewRef   = useRef<WebView>(null);
   const mapReadyRef  = useRef(false);
@@ -77,6 +120,7 @@ export default function MapScreen() {
   const [userAvatar,     setUserAvatar]     = useState<string | null>(null);
   const userStatusRef = useRef<string>("Safe");
   const userAvatarRef = useRef<string | null>(null);
+  const currentBrgyRef = useRef<string | null>(null); // barangay the evacuee is currently in
 
   // Load leaflet HTML asset
   useEffect(() => {
@@ -136,10 +180,21 @@ export default function MapScreen() {
       const data = await res.json();
       if (data.error) return;
       const centers: any[] = data.evacuation_centers ?? data.data ?? (Array.isArray(data) ? data : []);
-      setCenterCount(centers.length);
+
+      // Scope to the barangay the evacuee is currently standing in: only show
+      // centers whose pin is inside that same barangay's border. If we don't
+      // have a GPS fix / can't resolve the barangay yet, show all (fallback).
+      const coords = GpsTracker.getLastCoords();
+      const currentBrgy = coords ? getBarangayAtPoint(coords.latitude, coords.longitude) : null;
+
+      const scoped = currentBrgy
+        ? centers.filter((c) => isInsideBarangay(parseFloat(c.lat), parseFloat(c.lng), currentBrgy))
+        : centers;
+
+      setCenterCount(scoped.length);
       sendToMap({
         type: "update_centers",
-        centers: centers.map((c) => ({
+        centers: scoped.map((c) => ({
           id: c.id, name: c.name, address: c.address ?? "",
           lat: parseFloat(c.lat), lng: parseFloat(c.lng),
           op_status: c.op_status, occupancy: c.occupancy ?? 0, max_capacity: c.max_capacity ?? 0,
@@ -224,6 +279,15 @@ export default function MapScreen() {
         const { latitude: lat, longitude: lng } = update.coords;
         setLiveCoords({ lat, lng });
         sendToMap({ type: "update_position", lat, lng, status: userStatusRef.current, avatar: userAvatarRef.current });
+
+        // Re-scope evacuation centers when the evacuee moves into a new barangay
+        // (skip while the Nearest modal owns the markers with its own filter).
+        const brgyNow = getBarangayAtPoint(lat, lng);
+        if (brgyNow !== currentBrgyRef.current) {
+          currentBrgyRef.current = brgyNow;
+          if (filterModeRef.current === "none") fetchCenters();
+        }
+
         if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
         geocodeTimer.current = setTimeout(async () => {
           const name = await reverseGeocode(lat, lng);
@@ -235,7 +299,7 @@ export default function MapScreen() {
       unsubscribe();
       if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
     };
-  }, [sendToMap]);
+  }, [sendToMap, fetchCenters]);
 
   // When status or avatar changes, keep refs in sync and update the map marker immediately
   useEffect(() => {
@@ -335,8 +399,12 @@ export default function MapScreen() {
 
   async function handleWebViewMessage(event: WebViewMessageEvent) {
     try {
-      const msg = JSON.parse(event.nativeEvent.data) as { type: string; distance?: string; duration?: string; name?: string };
-      if (msg.type === "map_ready") {
+      const msg = JSON.parse(event.nativeEvent.data) as { type: string; distance?: string; duration?: string; name?: string; toLat?: number; toLng?: number };
+      if (msg.type === "open_google_maps") {
+        if (msg.toLat != null && msg.toLng != null) {
+          openGoogleMapsDirections(msg.toLat, msg.toLng, msg.name);
+        }
+      } else if (msg.type === "map_ready") {
         mapReadyRef.current = true;
         setMapReady(true);
         const queue = pendingQueue.current.splice(0);
@@ -560,8 +628,9 @@ export default function MapScreen() {
                         style={[styles.directionsBtn, !isOpen && styles.directionsBtnDisabled]}
                         onPress={() => {
                           setShowNearest(false);
-                          // Send get_directions to Leaflet — it will draw the route
-                          sendToMap({ type: "get_directions", toLat: item.lat, toLng: item.lng, name: item.name });
+                          // Open the Google Maps app and navigate from the user's
+                          // current location to this center's pin.
+                          openGoogleMapsDirections(item.lat, item.lng, item.name);
                         }}
                       >
                         <Ionicons name="navigate" size={14} color={isOpen ? "#1d4ed8" : "#94a3b8"} />

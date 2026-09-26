@@ -1,30 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, ScrollView, Modal, FlatList, Alert, StatusBar, Image,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useNavigationContainerRef } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { API_BASE_URL } from '@/constants/config';
+import { apiFetch } from '@/constants/config';
 import { setToken } from '@/hooks/use-auth';
-
-const BARANGAYS = [
-  { id: 1,  name: 'Abuanan' },       { id: 2,  name: 'Alianza' },
-  { id: 3,  name: 'Atipuluan' },     { id: 4,  name: 'Bacong-Montilla' },
-  { id: 5,  name: 'Bagroy' },        { id: 6,  name: 'Balingasag' },
-  { id: 7,  name: 'Binubuhan' },     { id: 8,  name: 'Busay' },
-  { id: 9,  name: 'Calumangan' },    { id: 10, name: 'Caridad' },
-  { id: 11, name: 'Don Jorge L. Araneta' }, { id: 12, name: 'Dulao' },
-  { id: 13, name: 'Ilijan' },        { id: 14, name: 'Lag-asan' },
-  { id: 15, name: 'Ma-ao' },         { id: 16, name: 'Mailum' },
-  { id: 17, name: 'Malingin' },      { id: 18, name: 'Napoles' },
-  { id: 19, name: 'Pacol' },         { id: 20, name: 'Poblacion' },
-  { id: 21, name: 'Rizal' },         { id: 22, name: 'Sampinit' },
-  { id: 23, name: 'Tabunan' },       { id: 24, name: 'Taloc' },
-];
+import OtpModal from '@/components/OtpModal';
 
 export default function RegisterScreen() {
+  const navigationRef = useNavigationContainerRef();
+  const [barangays, setBarangays] = useState<{id: number; name: string}[]>([]);
   const [fullName, setFullName]   = useState('');
   const [username, setUsername]   = useState('');
   const [email, setEmail]         = useState('');
@@ -44,6 +33,23 @@ export default function RegisterScreen() {
   const [loading, setLoading]           = useState(false);
   const [gpsLoading, setGpsLoading]     = useState(false);
   const [showBarangayPicker, setShowBarangayPicker] = useState(false);
+  const [showOtp, setShowOtp]           = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(60);
+
+  // Fetch barangays from API
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiFetch('/api/barangays/list', {}, 15000);
+        const json = await res.json();
+        const list = json.data || [];
+        setBarangays(list.map((b: any) => ({ id: b.id, name: b.name })));
+      } catch {
+        // Fallback if API fails
+        setBarangays([]);
+      }
+    })();
+  }, []);
 
   async function getLocation() {
     setGpsLoading(true);
@@ -60,41 +66,135 @@ export default function RegisterScreen() {
     }
   }
 
+  // Lightweight client-side validation so we only email a code once the form
+  // looks complete. The backend re-validates everything authoritatively.
+  function validateForm(): boolean {
+    const errs: Record<string, string> = {};
+    if (!fullName.trim()) errs.full_name = 'Full name is required.';
+    if (!username.trim()) errs.username = 'Username is required.';
+    else if (!/^[a-zA-Z0-9._]{3,30}$/.test(username.trim())) errs.username = 'Username must be 3–30 characters (letters, numbers, . or _).';
+    if (!email.trim()) errs.email = 'Email address is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs.email = 'Enter a valid email address.';
+    if (!age) errs.age = 'Age is required.';
+    if (!address.trim()) errs.address = 'Address is required.';
+    if (!barangayId) errs.barangay_id = 'Barangay is required.';
+    if (!contactNo.trim()) errs.contact_no = 'Contact number is required.';
+    if (!emergName.trim()) errs.emerg_name = 'Emergency contact name is required.';
+    if (!emergNo.trim()) errs.emerg_no = 'Emergency contact number is required.';
+    if (!password) errs.password = 'Password is required.';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function buildPayload(code?: string) {
+    return {
+      full_name: fullName.trim(),
+      username: username.trim(),
+      email: email.trim(),
+      age: age ? parseInt(age, 10) : null,
+      address: address.trim(),
+      barangay_id: barangayId,
+      contact_no: contactNo.trim(),
+      emerg_name: emergName.trim(),
+      emerg_no: emergNo.trim(),
+      password,
+      lat,
+      lng,
+      ...(code ? { code } : {}),
+    };
+  }
+
+  // Step 1: validate, then ask the backend to email a verification code.
   async function handleRegister() {
     setFieldErrors({});
     setGeneralError('');
+    if (!validateForm()) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
+      // Sending the email over SMTP can take several seconds — allow up to 45s.
+      const res = await apiFetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: fullName.trim(),
-          username: username.trim(),
-          email: email.trim(),
-          age: age ? parseInt(age, 10) : null,
-          address: address.trim(),
-          barangay_id: barangayId,
-          contact_no: contactNo.trim(),
-          emerg_name: emergName.trim(),
-          emerg_no: emergNo.trim(),
-          password,
-          lat,
-          lng,
-        }),
-      });
+        body: JSON.stringify({ email: email.trim(), full_name: fullName.trim() }),
+      }, 45000);
       const data = await res.json() as any;
       if (data.error) {
         if (data.fields) setFieldErrors(data.fields);
-        else setGeneralError(data.message ?? 'Registration failed.');
+        else if (data.code === 'DUPLICATE') setFieldErrors({ email: data.message });
+        else setGeneralError(data.message ?? 'Could not send verification code.');
         return;
       }
-      await setToken(data.token);
-      router.replace('/(app)/map');
-    } catch {
-      setGeneralError('Network error. Check your connection.');
+      setResendSeconds(60);
+      setShowOtp(true);
+    } catch (e: any) {
+      setGeneralError(
+        e?.name === 'AbortError'
+          ? 'Sending the code is taking too long. Please try again.'
+          : 'Network error. Check your connection.'
+      );
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Step 2: submit the full registration with the verification code.
+  // Returns an error string for the OTP modal, or null on success.
+  async function submitWithCode(code: string): Promise<string | null> {
+    let res: Response;
+    try {
+      // Registration itself is fast (no email), but keep a safe 25s ceiling.
+      res = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(buildPayload(code)),
+      }, 25000);
+    } catch (e: any) {
+      // fetch itself failed — connection never completed.
+      if (e?.name === 'AbortError') return 'The request timed out. Please try again.';
+      // Surface the real reason to help diagnose device-side connectivity.
+      const detail = e?.message ? ` (${e.message})` : '';
+      return `Cannot reach the server${detail}. Check that your phone is on the same Wi-Fi as the server.`;
+    }
+
+    // Read as text first so stray output or non-JSON never throws here.
+    const raw = await res.text();
+    let data: any = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch {
+      // Show the start of the actual body so we can see what the server sent.
+      const preview = (raw || '(empty)').replace(/\s+/g, ' ').slice(0, 120);
+      return `Unexpected response (${res.status}): ${preview}`;
+    }
+
+    if (!res.ok || data.error) {
+      // Code-specific error stays in the modal; other field errors close it.
+      if (data.fields?.code) return data.fields.code;
+      if (data.fields) { setFieldErrors(data.fields); setShowOtp(false); return null; }
+      return data.message ?? `Registration failed (${res.status}).`;
+    }
+
+    await setToken(data.token);
+    setShowOtp(false);
+    navigationRef.dispatch(
+      CommonActions.reset({ index: 0, routes: [{ name: '(app)', params: { screen: 'map' } }] })
+    );
+    return null;
+  }
+
+  // Resend a verification code. Returns an error string or null.
+  async function resendCode(): Promise<string | null> {
+    try {
+      const res = await apiFetch('/api/auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), full_name: fullName.trim() }),
+      }, 45000);
+      const data = await res.json() as any;
+      if (data.error) return data.message ?? 'Could not resend code.';
+      return null;
+    } catch (e: any) {
+      return e?.name === 'AbortError'
+        ? 'Sending the code is taking too long. Please try again.'
+        : 'Network error. Check your connection.';
     }
   }
 
@@ -252,7 +352,7 @@ export default function RegisterScreen() {
           <TouchableOpacity style={[st.button, loading && st.buttonDisabled]} onPress={handleRegister} disabled={loading}>
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={st.buttonText}>Create Account</Text>
+              : <Text style={st.buttonText}>Continue</Text>
             }
           </TouchableOpacity>
 
@@ -268,7 +368,7 @@ export default function RegisterScreen() {
           <View style={st.modalContent}>
             <Text style={st.modalTitle}>Select Barangay</Text>
             <FlatList
-              data={BARANGAYS}
+              data={barangays}
               keyExtractor={(item) => String(item.id)}
               renderItem={({ item }) => (
                 <TouchableOpacity style={st.modalItem} onPress={() => {
@@ -287,6 +387,16 @@ export default function RegisterScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Email verification step */}
+      <OtpModal
+        visible={showOtp}
+        email={email.trim()}
+        resendCooldown={resendSeconds}
+        onSubmit={submitWithCode}
+        onResend={resendCode}
+        onClose={() => setShowOtp(false)}
+      />
     </>
   );
 }

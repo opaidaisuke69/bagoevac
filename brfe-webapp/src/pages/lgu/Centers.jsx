@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import { TableSkeleton } from '../../components/Skeleton';
 import Badge from '../../components/Badge';
 import ProgressBar from '../../components/ProgressBar';
 import Modal from '../../components/Modal';
+import LocationPicker from '../../components/LocationPicker';
 
 const initialForm = { name: '', address: '', latitude: '', longitude: '', max_capacity: '', occupancy: '0', op_status: 'Open', barangay_id: '' };
 
@@ -102,21 +103,37 @@ export default function LguCenters() {
         )}
       </div>
 
-      <Modal open={modalOpen} onClose={closeModal} title={editingId ? 'Edit Center' : 'Add Center'} size="lg">
-        <div className="space-y-4">
-          <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />{errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}</div>
-          <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Address *</label><input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="input" /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Latitude *</label><input type="number" step="any" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} className="input" placeholder="10.5360" /></div>
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Longitude *</label><input type="number" step="any" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} className="input" placeholder="122.8950" /></div>
+      <Modal open={modalOpen} onClose={closeModal} title={editingId ? 'Edit Center' : 'Add Center'} size="3xl">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: form fields */}
+          <div className="space-y-4">
+            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Name *</label><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" />{errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}</div>
+            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Address *</label><input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="input" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Latitude *</label><input type="number" step="any" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: e.target.value })} className="input" placeholder="10.5360" />{errors.latitude && <p className="text-xs text-red-500 mt-1">{errors.latitude}</p>}</div>
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Longitude *</label><input type="number" step="any" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: e.target.value })} className="input" placeholder="122.8950" />{errors.longitude && <p className="text-xs text-red-500 mt-1">{errors.longitude}</p>}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Max Capacity *</label><input type="number" min="1" value={form.max_capacity} onChange={(e) => setForm({ ...form, max_capacity: e.target.value })} className="input" /></div>
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Occupancy</label><input type="number" min="0" value={form.occupancy} onChange={(e) => setForm({ ...form, occupancy: e.target.value })} className="input" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label><select value={form.op_status} onChange={(e) => setForm({ ...form, op_status: e.target.value })} className="select w-full"><option value="Open">Open</option><option value="Full">Full</option><option value="Closed">Closed</option></select></div>
+              <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Barangay</label><select value={form.barangay_id} onChange={(e) => setForm({ ...form, barangay_id: e.target.value })} className="select w-full"><option value="">— Select —</option>{(barangays || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Max Capacity *</label><input type="number" min="1" value={form.max_capacity} onChange={(e) => setForm({ ...form, max_capacity: e.target.value })} className="input" /></div>
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Occupancy</label><input type="number" min="0" value={form.occupancy} onChange={(e) => setForm({ ...form, occupancy: e.target.value })} className="input" /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label><select value={form.op_status} onChange={(e) => setForm({ ...form, op_status: e.target.value })} className="select w-full"><option value="Open">Open</option><option value="Full">Full</option><option value="Closed">Closed</option></select></div>
-            <div><label className="block text-sm font-semibold text-slate-700 mb-1.5">Barangay</label><select value={form.barangay_id} onChange={(e) => setForm({ ...form, barangay_id: e.target.value })} className="select w-full"><option value="">— Select —</option>{(barangays || []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+
+          {/* Right: map pin picker */}
+          <div className="flex flex-col">
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Pin Location on Map *</label>
+            <div className="flex-1 min-h-[380px]">
+              <LocationPicker
+                height="100%"
+                lat={form.latitude}
+                lng={form.longitude}
+                onChange={({ lat, lng }) => setForm((f) => ({ ...f, latitude: String(lat), longitude: String(lng) }))}
+              />
+            </div>
           </div>
         </div>
         <div className="flex gap-3 mt-6">

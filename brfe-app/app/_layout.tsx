@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Image } from 'react-native';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Slot, router, useRootNavigationState } from 'expo-router';
+import { View, ActivityIndicator, Image, LogBox } from 'react-native';
+import { DarkTheme, DefaultTheme, ThemeProvider, CommonActions } from '@react-navigation/native';
+import { Slot, useRootNavigationState, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-reanimated';
@@ -9,11 +9,19 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { isAuthenticated } from '@/hooks/use-auth';
 
+// Suppress non-fatal warnings in dev
+LogBox.ignoreLogs([
+  'Unable to activate keep awake',
+  "Passing an object as the argument to 'navigate' is deprecated",
+]);
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const navState = useRootNavigationState();
+  const navigationRef = useNavigationContainerRef();
   const [authChecked, setAuthChecked] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [initialRouteSet, setInitialRouteSet] = useState(false);
 
   useEffect(() => {
     isAuthenticated()
@@ -25,18 +33,27 @@ export default function RootLayout() {
   useEffect(() => {
     if (!authChecked) return;
     if (!navState?.key) return;
+    if (initialRouteSet) return;
+    if (!navigationRef.isReady()) return;
+    setInitialRouteSet(true);
+
     if (authed) {
-      // Route based on stored role
       const { getRole } = require('@/hooks/use-auth');
       getRole().then((role: string | null) => {
         if (role === 'rescuer') {
-          router.replace('/(rescuer)/assignments');
+          navigationRef.dispatch(
+            CommonActions.reset({ index: 0, routes: [{ name: '(rescuer)', params: { screen: 'assignments' } }] })
+          );
         } else {
-          router.replace('/(app)/map');
+          navigationRef.dispatch(
+            CommonActions.reset({ index: 0, routes: [{ name: '(app)', params: { screen: 'map' } }] })
+          );
         }
       });
     } else {
-      router.replace('/(auth)/login');
+      navigationRef.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: '(auth)', params: { screen: 'login' } }] })
+      );
     }
   }, [authChecked, navState?.key, authed]);
 

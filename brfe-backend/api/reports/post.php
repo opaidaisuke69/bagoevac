@@ -163,10 +163,10 @@ $existingRescue->execute([$userId]);
 $rescueId = null;
 if (!$existingRescue->fetch()) {
     $rStmt = $pdo->prepare(
-        "INSERT INTO rescue_requests (user_id, lat, lng, status_at_request, req_status, requested_at)
-         VALUES (?, ?, ?, ?, 'Pending', ?)"
+        "INSERT INTO rescue_requests (user_id, lat, lng, status_at_request, photo_path, req_status, requested_at)
+         VALUES (?, ?, ?, ?, ?, 'Pending', ?)"
     );
-    $rStmt->execute([$userId, $lat, $lng, $status, $now]);
+    $rStmt->execute([$userId, $lat, $lng, $status, $photoPath, $now]);
     $rescueId = (int)$pdo->lastInsertId();
 }
 

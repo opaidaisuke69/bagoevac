@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["comgooglemaps", "googlemaps"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -34,7 +37,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#1e40af"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

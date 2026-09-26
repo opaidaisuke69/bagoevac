@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../services/JwtService.php';
 require_once __DIR__ . '/../../api/response.php';
+require_once __DIR__ . '/../../services/SettingsService.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -27,6 +28,14 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([$username]);
 $account = $stmt->fetch();
+
+// System shutdown: only Barangay_Official and LGU_Admin may log in.
+// Rescuers (who authenticate through this same endpoint) are blocked even with
+// valid credentials. Checked before password verification so the gate can't be
+// bypassed. LGU_Admin/Barangay_Official pass through.
+if ($account && $account['role'] === 'Rescuer' && SettingsService::isMaintenance()) {
+    jsonError('MAINTENANCE', 'The system is temporarily unavailable. Please try again later.', 503);
+}
 
 if (!$account || !password_verify($password, $account['password_hash'])) {
     jsonError('AUTH_FAILED', 'Invalid username or password.', 401);

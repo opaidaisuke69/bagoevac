@@ -3,12 +3,14 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar, Image,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useNavigationContainerRef } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '@/constants/config';
 import { setToken, setRole } from '@/hooks/use-auth';
 
 export default function RescuerLoginScreen() {
+  const navigationRef = useNavigationContainerRef();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
@@ -29,6 +31,10 @@ export default function RescuerLoginScreen() {
         body: JSON.stringify({ username: username.trim(), password }),
       });
       const data = await res.json();
+      if (res.status === 503 || data.code === 'MAINTENANCE') {
+        setError('System Currently Down. Please try again later.');
+        return;
+      }
       if (data.error) { setError(data.message ?? 'Invalid credentials.'); return; }
       if (data.user?.role !== 'Rescuer') {
         setError('This account is not a Rescuer account.');
@@ -36,7 +42,9 @@ export default function RescuerLoginScreen() {
       }
       await setToken(data.token);
       await setRole('rescuer');
-      router.replace('/(rescuer)/assignments');
+      navigationRef.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: '(rescuer)', params: { screen: 'assignments' } }] })
+      );
     } catch {
       setError('Network error. Check your connection.');
     } finally {

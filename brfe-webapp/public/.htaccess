@@ -1,7 +1,10 @@
-RewriteEngine On
-RewriteBase /
+<IfModule mod_rewrite.c>
+  RewriteEngine On
 
-# If the request is not a file or directory, serve index.html (SPA routing)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ /index.html [L]
+  # If the request is a real file or directory, serve it
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Otherwise serve index.html for SPA routing
+  RewriteRule . index.html [L]
+</IfModule>

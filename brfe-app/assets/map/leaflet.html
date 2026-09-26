@@ -135,7 +135,7 @@
               +(c.address?'<br/><span style="font-size:11px;color:#666;">'+c.address+'</span>':'')
               +'<br/><span style="font-size:11px;color:'+color+';font-weight:700;">'+c.op_status+'</span>'
               +' · '+(c.occupancy||0)+'/'+c.max_capacity
-              +'<br/><button onclick="getDirectionsTo('+c.lat+','+c.lng+',\''+c.name.replace(/'/g,"")+'\')" style="margin-top:6px;background:#2563EB;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;width:100%;">Get Directions</button>'
+              +'<br/><button onclick="mapsAppDirections('+c.lat+','+c.lng+',\''+c.name.replace(/'/g,"")+'\')" style="margin-top:6px;background:#2563EB;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;width:100%;">Get Directions</button>'
               +'</div>'
           });
           marker.addListener('click',function(){info.open(map,marker);});
@@ -249,6 +249,11 @@
       postToRN({type:'route_cancelled'});
     }
 
+    // Ask React Native to open the native Google Maps app for turn-by-turn nav.
+    function mapsAppDirections(lat,lng,name){
+      postToRN({type:'open_google_maps',toLat:lat,toLng:lng,name:name});
+    }
+
     // ── Message handler ─────────────────────────────────────────────────────
     function handleMessage(event){
       var data;
@@ -283,6 +288,6 @@
     document.addEventListener('message',handleMessage);
     window.addEventListener('message',handleMessage);
   </script>
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAgqwnR4Y2VbK7kIi_yrYxxHr5FTiXQwZc&callback=initMap"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAYMxiPynLx-KZ7udjt382QPsgadmzh7HM&callback=initMap"></script>
 </body>
 </html>

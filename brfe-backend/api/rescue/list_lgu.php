@@ -28,8 +28,13 @@ $pdo    = Database::getInstance();
 $where  = ['1=1'];
 $params = [];
 
-if (!$isAdmin && $barangayId) {
-    // Show rescue requests from evacuees registered in this barangay
+// scope=jurisdiction → return ALL rescue requests so the caller can filter by
+// the request's live GPS location (border jurisdiction) instead of the
+// evacuee's registered barangay.
+$jurisdiction = ($_GET['scope'] ?? '') === 'jurisdiction';
+
+if (!$isAdmin && $barangayId && !$jurisdiction) {
+    // Default: rescue requests from evacuees registered in this barangay
     $where[]  = 'u.barangay_id = ?';
     $params[] = $barangayId;
 }
@@ -42,7 +47,7 @@ if (!empty($_GET['status']) && in_array($_GET['status'], $validStatuses, true)) 
 
 $sql = 'SELECT rr.id, rr.user_id, rr.lat AS latitude, rr.lng AS longitude,
                rr.status_at_request, rr.req_status, rr.responder_id,
-               rr.requested_at, rr.completed_at,
+               rr.requested_at, rr.completed_at, rr.photo_path,
                u.full_name, u.status AS current_status, u.contact_no,
                b.name AS barangay_name, b.id AS evacuee_barangay_id
         FROM rescue_requests rr

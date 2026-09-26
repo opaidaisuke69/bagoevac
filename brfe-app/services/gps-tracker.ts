@@ -64,10 +64,12 @@ export async function start(): Promise<void> {
     return;
   }
 
-  // Fast initial fix
+  // Fast initial fix — shown to the user right away, but only posted if it's
+  // reasonably accurate. A coarse first fix (cell/wifi before GPS locks) is
+  // often far off, so we don't want to broadcast it as the rescuer's position.
   try {
     const initial = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
+      accuracy: Location.Accuracy.Highest,
     });
     const coords: Coords = {
       latitude: initial.coords.latitude,
@@ -76,15 +78,17 @@ export async function start(): Promise<void> {
     };
     lastCoords = coords;
     notifyCallbacks({ coords, unavailable: false });
-    postLocation(coords);
+    if (isAcceptable(coords)) postLocation(coords);
   } catch { /* watcher will provide first fix */ }
 
-  // 500ms continuous watch — real-time tracking
+  // Continuous watch — real-time tracking. We keep the most ACCURATE fix rather
+  // than blindly overwriting, so the marker converges on the true position and
+  // never gets stuck on a bad early reading.
   subscription = await Location.watchPositionAsync(
     {
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 2000,      // fire every 2 seconds (reduced from 500ms to cut noise)
-      distanceInterval: 5,     // only fire if moved at least 5 meters
+      accuracy: Location.Accuracy.Highest,
+      timeInterval: 1000,      // fire up to once per second
+      distanceInterval: 0,     // also fire when stationary so accuracy can improve
     },
     (location: Location.LocationObject) => {
       const coords: Coords = {
@@ -92,13 +96,50 @@ export async function start(): Promise<void> {
         longitude: location.coords.longitude,
         accuracy: location.coords.accuracy,
       };
-      // Discard readings with poor accuracy (> 30 meters)
-      if (coords.accuracy && coords.accuracy > 30) return;
+      if (!shouldAccept(coords)) return;
       lastCoords = coords;
       notifyCallbacks({ coords, unavailable: false });
-      postLocation(coords); // upsert — server handles insert vs update
+      if (isAcceptable(coords)) postLocation(coords); // upsert
     },
   );
+}
+
+// A fix is "acceptable" to broadcast if its reported accuracy is within GOOD_ACCURACY_M.
+const GOOD_ACCURACY_M = 30;
+function isAcceptable(coords: Coords): boolean {
+  return coords.accuracy == null || coords.accuracy <= GOOD_ACCURACY_M;
+}
+
+// Decide whether a new watch reading should replace the current one.
+// - Always accept if we have nothing yet.
+// - Accept when the new fix is at least as accurate (with small tolerance),
+//   OR when the device has clearly moved (so real movement is never ignored),
+//   OR when the current fix is coarse and the new one is any better.
+function shouldAccept(next: Coords): boolean {
+  if (!lastCoords) return true;
+  const prevAcc = lastCoords.accuracy ?? Number.POSITIVE_INFINITY;
+  const nextAcc = next.accuracy ?? Number.POSITIVE_INFINITY;
+
+  // Prefer better (or comparable) accuracy.
+  if (nextAcc <= prevAcc + 5) return true;
+
+  // If the previous fix was coarse, take any improvement.
+  if (prevAcc > GOOD_ACCURACY_M && nextAcc < prevAcc) return true;
+
+  // Otherwise accept only if the position genuinely changed a lot (real movement).
+  const moved = haversineMeters(lastCoords, next);
+  return moved > Math.max(prevAcc, 20);
+}
+
+function haversineMeters(a: Coords, b: Coords): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 export function stop(): void {

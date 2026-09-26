@@ -1,5 +1,4 @@
 RewriteEngine On
-RewriteBase /bagoevac/brfe-backend/
 
 # Pass Authorization header to PHP (Apache strips it by default)
 RewriteCond %{HTTP:Authorization} .

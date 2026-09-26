@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../config/env.php';
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../api/response.php';
 require_once __DIR__ . '/../../services/JwtService.php';
+require_once __DIR__ . '/../../services/OtpService.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -20,6 +21,7 @@ $errors = [];
 $full_name   = trim($body['full_name']   ?? '');
 $username    = trim($body['username']    ?? '');
 $email       = trim($body['email']       ?? '');
+$code        = trim($body['code']        ?? '');
 $age         = $body['age']              ?? null;
 $address     = trim($body['address']     ?? '');
 $barangay_id = $body['barangay_id']      ?? null;
@@ -44,6 +46,10 @@ if ($email === '') {
     $errors['email'] = 'Email address is required.';
 } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $errors['email'] = 'Enter a valid email address.';
+}
+
+if ($code === '' || !preg_match('/^\d{6}$/', $code)) {
+    $errors['code'] = 'Enter the 6-digit verification code sent to your email.';
 }
 
 if ($age === null || $age === '') {
@@ -96,19 +102,19 @@ $pdo = Database::getInstance();
 $stmt = $pdo->prepare('SELECT id FROM users WHERE contact_no = ? LIMIT 1');
 $stmt->execute([$contact_no]);
 if ($stmt->fetch()) {
-    errorDuplicateAccount();
+    jsonError('DUPLICATE', 'This contact number is already registered.', 409);
 }
 
 $stmt = $pdo->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
 $stmt->execute([$email]);
 if ($stmt->fetch()) {
-    errorValidation(['email' => 'This email address is already registered.']);
+    jsonError('DUPLICATE', 'This email address is already registered.', 409);
 }
 
 $stmt = $pdo->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
 $stmt->execute([$username]);
 if ($stmt->fetch()) {
-    errorValidation(['username' => 'This username is already taken.']);
+    jsonError('DUPLICATE', 'This username is already taken.', 409);
 }
 
 // ── Verify barangay_id exists ─────────────────────────────────────────────────
@@ -116,7 +122,20 @@ if ($stmt->fetch()) {
 $stmt = $pdo->prepare('SELECT id FROM barangays WHERE id = ? LIMIT 1');
 $stmt->execute([(int)$barangay_id]);
 if (!$stmt->fetch()) {
-    errorFkViolation();
+    jsonError('VALIDATION', 'Invalid barangay selected.', 422);
+}
+
+// ── Verify the email code (before creating anything) ──────────────────────────
+
+$check = OtpService::verify($email, OtpService::PURPOSE_REGISTER, $code);
+if (!$check['ok']) {
+    $map = [
+        'NOT_FOUND' => 'No verification code found for this email. Request a new one.',
+        'EXPIRED'   => 'Your verification code has expired. Request a new one.',
+        'TOO_MANY'  => 'Too many incorrect attempts. Request a new code.',
+        'INVALID'   => 'Incorrect verification code. Please try again.',
+    ];
+    errorValidation(['code' => $map[$check['error']] ?? 'Invalid verification code.']);
 }
 
 // ── Insert user ───────────────────────────────────────────────────────────────
@@ -127,8 +146,8 @@ $lat_val = ($lat !== null && $lat !== '') ? (float)$lat : null;
 $lng_val = ($lng !== null && $lng !== '') ? (float)$lng : null;
 
 $stmt = $pdo->prepare(
-    'INSERT INTO users (full_name, username, email, age, address, barangay_id, contact_no, emerg_name, emerg_no, password_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO users (full_name, username, email, email_verified, age, address, barangay_id, contact_no, emerg_name, emerg_no, password_hash)
+     VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)'
 );
 $stmt->execute([
     $full_name,
@@ -145,18 +164,25 @@ $stmt->execute([
 
 $user_id = (int)$pdo->lastInsertId();
 
-// Seed default status_updates row
-$pdo->prepare('INSERT INTO status_updates (user_id, status) VALUES (?, \'Safe\')')
-    ->execute([$user_id]);
+// Seed default status_updates row (idempotent — a stale row for this id must
+// not break registration).
+$pdo->prepare(
+    'INSERT INTO status_updates (user_id, status) VALUES (?, \'Safe\')
+     ON DUPLICATE KEY UPDATE status = VALUES(status)'
+)->execute([$user_id]);
 
 if ($lat_val !== null && $lng_val !== null) {
-    $pdo->prepare('INSERT INTO locations (user_id, lat, lng) VALUES (?, ?, ?)')
-        ->execute([$user_id, $lat_val, $lng_val]);
+    // locations has a UNIQUE key on user_id — upsert so a pre-existing row
+    // (e.g. from GPS posting) is updated instead of throwing a duplicate error.
+    $pdo->prepare(
+        'INSERT INTO locations (user_id, lat, lng) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE lat = VALUES(lat), lng = VALUES(lng)'
+    )->execute([$user_id, $lat_val, $lng_val]);
 }
 
 // ── Issue JWT ─────────────────────────────────────────────────────────────────
 
-$token = JwtService::sign([
+$token = JwtService::encode([
     'user_id'    => $user_id,
     'contact_no' => $contact_no,
     'role'       => 'evacuee',

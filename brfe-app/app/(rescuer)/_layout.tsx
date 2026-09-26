@@ -1,15 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getToken } from "../../hooks/use-auth";
+import { API_BASE_URL } from "../../constants/config";
 import * as WsClient from "../../services/websocket-client";
 import * as GpsTracker from "../../services/gps-tracker";
+import MaintenanceGate from "../../components/MaintenanceGate";
 
 export default function RescuerLayout() {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, Platform.OS === "android" ? 8 : 0);
+  const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     // Start GPS tracking for rescuer location sharing
@@ -18,9 +21,36 @@ export default function RescuerLayout() {
       const token = await getToken();
       if (token) WsClient.connect(token);
     })();
+
+    // Location heartbeat — makes EVERY online rescuer visible on the admin map,
+    // not just those on an active rescue. Posts current GPS every 10s while the
+    // rescuer app is open. Active-rescue screens post more frequently (3s) with
+    // a rescue_id; this idle heartbeat has no rescue_id.
+    const postHeartbeat = async () => {
+      const coords = GpsTracker.getLastCoords();
+      if (!coords) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch(`${API_BASE_URL}/api/rescue/location`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ lat: coords.latitude, lng: coords.longitude }),
+        });
+      } catch {
+        // non-fatal — next tick retries
+      }
+    };
+    postHeartbeat();
+    heartbeat.current = setInterval(postHeartbeat, 10000);
+
+    return () => {
+      if (heartbeat.current) clearInterval(heartbeat.current);
+    };
   }, []);
 
   return (
+    <MaintenanceGate>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -79,5 +109,6 @@ export default function RescuerLayout() {
         }}
       />
     </Tabs>
+    </MaintenanceGate>
   );
 }

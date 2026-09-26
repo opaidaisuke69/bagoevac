@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import api from '../../lib/api';
 import { formatDate, formatCoord } from '../../lib/utils';
 import { TableSkeleton } from '../../components/Skeleton';

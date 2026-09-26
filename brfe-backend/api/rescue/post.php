@@ -53,15 +53,25 @@ if (!$user) {
 
 $statusAtRequest = $user['status'];
 
+// ── Attach proof image from the evacuee's most recent report (if any) ─────────
+
+$photoStmt = $pdo->prepare(
+    'SELECT photo_path FROM reports WHERE user_id = ? AND photo_path IS NOT NULL
+     ORDER BY submitted_at DESC LIMIT 1'
+);
+$photoStmt->execute([$userId]);
+$photoRow  = $photoStmt->fetch();
+$photoPath = $photoRow['photo_path'] ?? null;
+
 // ── Insert rescue request ─────────────────────────────────────────────────────
 
 $now = gmdate('Y-m-d H:i:s');
 
 $stmt = $pdo->prepare(
-    'INSERT INTO rescue_requests (user_id, lat, lng, status_at_request, req_status, requested_at)
-     VALUES (?, ?, ?, ?, \'Pending\', ?)'
+    'INSERT INTO rescue_requests (user_id, lat, lng, status_at_request, photo_path, req_status, requested_at)
+     VALUES (?, ?, ?, ?, ?, \'Pending\', ?)'
 );
-$stmt->execute([$userId, $lat, $lng, $statusAtRequest, $now]);
+$stmt->execute([$userId, $lat, $lng, $statusAtRequest, $photoPath, $now]);
 
 $requestId = (int)$pdo->lastInsertId();
 

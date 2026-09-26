@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { formatDate, formatCoord } from '../../lib/utils';
+import { isInsideBarangay } from '../../lib/geo';
+import { BARANGAY_ID_MAP } from '../../data/barangayBoundaries';
 import { TableSkeleton } from '../../components/Skeleton';
 import Badge from '../../components/Badge';
 import SearchInput from '../../components/SearchInput';
@@ -13,21 +15,29 @@ export default function BrgyEvacuees() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  // Fetch all located evacuees city-wide so anyone currently inside this
+  // barangay's border shows up, even if registered in another barangay.
   const { data: evacuees, isLoading } = useQuery({
     queryKey: ['brgy-evacuees-list', statusFilter],
     queryFn: async () => {
-      const params = { barangay_id: user?.barangay_id };
+      const params = { scope: 'jurisdiction' };
       if (statusFilter) params.status = statusFilter;
       const { data } = await api.get('/users/list-all', { params });
       return data.data || [];
     },
   });
 
-  const filtered = (evacuees || []).filter((u) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return u.full_name?.toLowerCase().includes(q) || u.contact_no?.includes(q);
-  });
+  const barangayName = BARANGAY_ID_MAP[user?.barangay_id] || user?.barangay_name || null;
+
+  const filtered = (evacuees || [])
+    // Jurisdiction by CURRENT location: only evacuees whose live GPS is inside
+    // this barangay's boundary.
+    .filter((u) => isInsideBarangay(u.latitude, u.longitude, barangayName))
+    .filter((u) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return u.full_name?.toLowerCase().includes(q) || u.contact_no?.includes(q);
+    });
 
   return (
     <div className="p-4 lg:p-8 space-y-6">

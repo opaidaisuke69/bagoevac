@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { Users, AlertTriangle, Clock, MapPin } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { isInsideBarangay } from '../../lib/geo';
@@ -35,36 +34,63 @@ function StatCard({ icon: Icon, label, value, color, loading }) {
 
 export default function BrgyDashboard() {
   const user = useAuthStore((s) => s.user);
-  const navigate = useNavigate();
 
-  const { data: evacuees, isLoading } = useQuery({
-    queryKey: ['brgy-dash-evacuees', user?.barangay_id],
+  // All located evacuees city-wide — the map AND the stat cards use the ones
+  // whose live GPS is currently inside this barangay's border, regardless of
+  // where they registered.
+  const { data: locatedEvacuees, isLoading } = useQuery({
+    queryKey: ['brgy-dash-jurisdiction'],
     queryFn: async () => {
-      const { data } = await api.get('/users/list-all');
+      const { data } = await api.get('/users/list-all', { params: { scope: 'jurisdiction' } });
       return data.data || [];
     },
     refetchInterval: 1500,
   });
 
   const { data: rescues } = useQuery({
-    queryKey: ['brgy-dash-rescues', user?.barangay_id],
+    queryKey: ['brgy-dash-rescues'],
     queryFn: async () => {
-      const { data } = await api.get('/rescue/list_lgu');
+      const { data } = await api.get('/rescue/list_lgu', { params: { scope: 'jurisdiction' } });
       return data.data || [];
     },
     refetchInterval: 1500,
   });
 
-  const safe    = (evacuees || []).filter((u) => u.status === 'Safe').length;
-  const need    = (evacuees || []).filter((u) => u.status === 'Need_Assistance').length;
-  const danger  = (evacuees || []).filter((u) => u.status === 'In_Danger').length;
-  const pending = (rescues  || []).filter((r) => r.req_status === 'Pending').length;
+  const { data: allCenters } = useQuery({
+    queryKey: ['brgy-dash-centers'],
+    queryFn: async () => {
+      const { data } = await api.get('/centers/list_lgu');
+      return data.data || [];
+    },
+    refetchInterval: 5000,
+  });
 
-  const barangayName = BARANGAY_ID_MAP[user?.barangay_id]
-    || user?.barangay_name
-    || (evacuees || []).find((u) => u.barangay_id == user?.barangay_id)?.barangay_name
-    || null;
+  // Resolve this admin's barangay name.
+  const barangayName = BARANGAY_ID_MAP[user?.barangay_id] || user?.barangay_name || null;
   const displayName = barangayName || `Barangay #${user?.barangay_id || ''}`;
+
+  // Everyone whose live GPS is currently inside this barangay's boundary,
+  // regardless of where they registered. Drives both the map and the stats.
+  const evacuees = (locatedEvacuees || []).filter((u) =>
+    isInsideBarangay(u.latitude, u.longitude, barangayName)
+  );
+
+  // Evacuation centers within this barangay's jurisdiction: either the center's
+  // pin falls inside the barangay border, or it's explicitly assigned to it.
+  const centers = (allCenters || []).filter((c) =>
+    isInsideBarangay(c.latitude, c.longitude, barangayName) ||
+    (c.barangay_id != null && c.barangay_id == user?.barangay_id)
+  );
+
+  // Stat counts follow the SAME jurisdiction rule as the map: evacuees whose
+  // live GPS is currently inside this barangay's border.
+  const total   = evacuees.length;
+  const safe    = evacuees.filter((u) => u.status === 'Safe').length;
+  const need    = evacuees.filter((u) => u.status === 'Need_Assistance').length;
+  const danger  = evacuees.filter((u) => u.status === 'In_Danger').length;
+  const pending = (rescues || []).filter((r) =>
+    r.req_status === 'Pending' && isInsideBarangay(r.latitude, r.longitude, barangayName)
+  ).length;
 
   return (
     <div className="flex flex-col h-full">
@@ -78,7 +104,7 @@ export default function BrgyDashboard() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard icon={Users}         label="Total"          value={(evacuees || []).length} color="blue"   loading={isLoading} />
+          <StatCard icon={Users}         label="Total"          value={total}                   color="blue"   loading={isLoading} />
           <StatCard icon={Users}         label="Safe"           value={safe}                    color="green"  loading={isLoading} />
           <StatCard icon={AlertTriangle} label="Need Help"      value={need}                    color="yellow" loading={isLoading} />
           <StatCard icon={AlertTriangle} label="In Danger"      value={danger}                  color="red"    loading={isLoading} />
@@ -89,7 +115,7 @@ export default function BrgyDashboard() {
       {/* Map */}
       <div className="flex-1 p-4 lg:p-8 pt-4">
         <div className="relative h-full min-h-[600px] rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">
-          <GoogleMapView evacuees={evacuees || []} zoom={14} filterBarangay={barangayName} />
+          <GoogleMapView evacuees={evacuees || []} centers={centers || []} zoom={14} filterBarangay={barangayName} />
 
           {/* Legend — left side */}
           <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg p-3 z-10 border border-slate-100 text-xs space-y-1.5">

@@ -29,8 +29,16 @@ $pdo = Database::getInstance();
 $where  = ['1=1'];
 $params = [];
 
-if (!$isAdmin && $myBrgyId > 0) {
-    // Show evacuees registered in this barangay
+// scope=jurisdiction → return ALL located evacuees so the caller can filter by
+// live GPS boundary (used by the Barangay dashboard map to show anyone currently
+// inside the barangay's border, regardless of where they registered).
+$jurisdiction = ($_GET['scope'] ?? '') === 'jurisdiction';
+
+if ($jurisdiction) {
+    // Only those with a known location are useful for boundary filtering.
+    $where[] = 'l.lat IS NOT NULL AND l.lng IS NOT NULL';
+} elseif (!$isAdmin && $myBrgyId > 0) {
+    // Default: evacuees registered in this barangay
     $where[]  = 'u.barangay_id = ?';
     $params[] = $myBrgyId;
 } elseif ($isAdmin && !empty($_GET['barangay_id'])) {

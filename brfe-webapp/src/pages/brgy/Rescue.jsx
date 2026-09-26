@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { LifeBuoy, CheckCircle2, UserPlus, MapPin, Clock, Phone, AlertTriangle } from 'lucide-react';
+import { LifeBuoy, CheckCircle2, UserPlus, MapPin, Clock, Phone, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import { useAuthStore } from '../../stores/authStore';
 import { formatDate } from '../../lib/utils';
+import { isInsideBarangay } from '../../lib/geo';
+import { BARANGAY_ID_MAP } from '../../data/barangayBoundaries';
 import { TableSkeleton } from '../../components/Skeleton';
 import Badge from '../../components/Badge';
 import Modal from '../../components/Modal';
@@ -17,17 +19,24 @@ export default function BrgyRescue() {
   const [search, setSearch] = useState('');
   const [assignModal, setAssignModal] = useState(null); // { id, name }
   const [selectedRescuer, setSelectedRescuer] = useState('');
+  const [lightbox, setLightbox] = useState(null);
 
-  // Rescue requests — scoped to barangay by backend
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost/bagoevac/brfe-backend/api';
+  const photoBase = API_BASE.replace('/api', '');
+
+  // Rescue requests — fetched city-wide, then filtered by the request's live
+  // GPS location (border jurisdiction), not the evacuee's registered barangay.
   const { data: rescues, isLoading } = useQuery({
     queryKey: ['brgy-rescues', statusFilter],
     queryFn: async () => {
-      const params = {};
+      const params = { scope: 'jurisdiction' };
       if (statusFilter) params.status = statusFilter;
       const { data } = await api.get('/rescue/list_lgu', { params });
       return data.data || [];
     },
   });
+
+  const barangayName = BARANGAY_ID_MAP[user?.barangay_id] || user?.barangay_name || null;
 
   // Rescuers in this barangay for assignment dropdown
   const { data: rescuers } = useQuery({
@@ -72,18 +81,18 @@ export default function BrgyRescue() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['brgy-rescues'] }),
   });
 
-  const filtered = (rescues || []).filter((r) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return r.full_name?.toLowerCase().includes(q) || r.barangay_name?.toLowerCase().includes(q);
-  });
+  const filtered = (rescues || [])
+    // Border jurisdiction: only requests whose GPS falls inside this barangay.
+    .filter((r) => isInsideBarangay(r.latitude, r.longitude, barangayName))
+    .filter((r) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return r.full_name?.toLowerCase().includes(q) || r.barangay_name?.toLowerCase().includes(q);
+    });
 
   const pending = filtered.filter((r) => r.req_status === 'Pending').length;
   const ongoing = filtered.filter((r) => r.req_status === 'Ongoing').length;
   const completed = filtered.filter((r) => r.req_status === 'Completed').length;
-
-  // Highlight urgent requests
-  const urgent = filtered.filter((r) => r.req_status === 'Pending');
 
   return (
     <div className="p-4 lg:p-8 space-y-6">
@@ -131,7 +140,7 @@ export default function BrgyRescue() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        {isLoading ? <TableSkeleton rows={6} cols={6} /> : (
+        {isLoading ? <TableSkeleton rows={6} cols={8} /> : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -140,6 +149,7 @@ export default function BrgyRescue() {
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Evacuee</th>
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Evacuee Status</th>
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Location</th>
+                  <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Proof</th>
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Rescue Status</th>
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Requested</th>
                   <th className="text-left px-5 py-4 font-semibold text-slate-500 text-xs uppercase tracking-wider">Action</th>
@@ -147,7 +157,7 @@ export default function BrgyRescue() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-16 text-slate-400">No rescue requests in your jurisdiction</td></tr>
+                  <tr><td colSpan={8} className="text-center py-16 text-slate-400">No rescue requests in your jurisdiction</td></tr>
                 ) : (
                   filtered.map((r) => (
                     <tr key={r.id} className={`hover:bg-slate-50/80 transition-colors ${r.req_status === 'Pending' ? 'bg-amber-50/30' : ''}`}>
@@ -176,6 +186,13 @@ export default function BrgyRescue() {
                             {parseFloat(r.latitude).toFixed(4)}, {parseFloat(r.longitude).toFixed(4)}
                           </a>
                         ) : '—'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {r.photo_path ? (
+                          <button onClick={() => setLightbox(`${photoBase}/public/${r.photo_path}`)} className="group relative">
+                            <img src={`${photoBase}/public/${r.photo_path}`} alt="Proof" className="w-12 h-12 object-cover rounded-xl border border-slate-200 group-hover:opacity-80 transition" />
+                          </button>
+                        ) : <ImageIcon size={16} className="text-slate-300" />}
                       </td>
                       <td className="px-5 py-3.5"><Badge status={r.req_status} /></td>
                       <td className="px-5 py-3.5 text-xs text-slate-500">{formatDate(r.requested_at)}</td>
@@ -266,6 +283,12 @@ export default function BrgyRescue() {
           </button>
         </div>
       </Modal>
+
+      {lightbox && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 cursor-pointer animate-fade-in" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="Rescue proof" className="max-w-full max-h-full rounded-2xl shadow-2xl animate-slide-up" />
+        </div>
+      )}
     </div>
   );
 }

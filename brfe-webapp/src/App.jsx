@@ -8,7 +8,8 @@ import LguDashboard from './pages/lgu/Dashboard';
 import LguReports from './pages/lgu/Reports';
 import LguEvacuees from './pages/lgu/Evacuees';
 import LguCenters from './pages/lgu/Centers';
-import LguAnnouncements from './pages/lgu/Announcements';
+import LguBroadcast from './pages/lgu/Broadcast';
+import LguGenerateReports from './pages/lgu/GenerateReports';
 import LguBarangayAccounts from './pages/lgu/BarangayAccounts';
 import LguRescueMonitor from './pages/lgu/RescueMonitor';
 
@@ -49,8 +50,9 @@ export default function App() {
         <Route path="reports" element={<LguReports />} />
         <Route path="evacuees" element={<LguEvacuees />} />
         <Route path="centers" element={<LguCenters />} />
-        <Route path="announcements" element={<LguAnnouncements />} />
+        <Route path="broadcast" element={<LguBroadcast />} />
         <Route path="accounts" element={<LguBarangayAccounts />} />
+        <Route path="generate-reports" element={<LguGenerateReports />} />
         <Route path="rescue-monitor" element={<LguRescueMonitor />} />
       </Route>
 

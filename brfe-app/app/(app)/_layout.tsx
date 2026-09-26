@@ -7,6 +7,7 @@ import { getToken } from "../../hooks/use-auth";
 import * as WsClient from "../../services/websocket-client";
 import * as GpsTracker from "../../services/gps-tracker";
 import { API_BASE_URL } from "../../constants/config";
+import MaintenanceGate from "../../components/MaintenanceGate";
 
 function BadgeIcon({ name, color, size, count }: { name: keyof typeof Ionicons.glyphMap; color: string; size: number; count: number }) {
   return (
@@ -59,6 +60,7 @@ export default function AppLayout() {
   }, []);
 
   return (
+    <MaintenanceGate>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -99,11 +101,11 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="chat"
+        name="announcements"
         options={{
-          title: "Chat",
+          title: "News",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "chatbubbles" : "chatbubbles-outline"} size={size} color={color} />
+            <Ionicons name={focused ? "megaphone" : "megaphone-outline"} size={size} color={color} />
           ),
         }}
       />
@@ -131,5 +133,6 @@ export default function AppLayout() {
         }}
       />
     </Tabs>
+    </MaintenanceGate>
   );
 }

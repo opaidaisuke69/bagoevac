@@ -5,7 +5,7 @@ import { BARANGAY_BOUNDARIES } from '../data/barangayBoundaries';
 import { enrichWithBoundaryBarangay } from '../lib/geo';
 import defaultHallImg from '../assets/images/logo.png';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyAgqwnR4Y2VbK7kIi_yrYxxHr5FTiXQwZc';
+const GOOGLE_MAPS_API_KEY = 'AIzaSyAYMxiPynLx-KZ7udjt382QPsgadmzh7HM';
 
 const containerStyle = { width: '100%', height: '100%' };
 const defaultCenter = { lat: 10.51, lng: 122.92 };
@@ -75,6 +75,33 @@ const statusColors = {
   In_Danger: '#ef4444',
 };
 
+// Human/person marker (SVG data URI) — colored by evacuee status.
+function personIcon(color) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 30 38">
+      <path d="M15 0C7.3 0 1 6.3 1 14c0 9.7 12.2 22.6 12.7 23.1a1.8 1.8 0 0 0 2.6 0C16.8 36.6 29 23.7 29 14 29 6.3 22.7 0 15 0z" fill="${color}" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="15" cy="11" r="4" fill="#fff"/>
+      <path d="M8.5 21c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6z" fill="#fff"/>
+    </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
+}
+
+// Firetruck marker (SVG data URI) — for rescuers. Green when responding, gray otherwise.
+function firetruckIcon(active) {
+  const body = active ? '#dc2626' : '#94a3b8';
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="42" height="30" viewBox="0 0 42 30">
+      <rect x="1" y="8" width="26" height="13" rx="2" fill="${body}" stroke="#fff" stroke-width="1.5"/>
+      <rect x="27" y="12" width="13" height="9" rx="2" fill="${body}" stroke="#fff" stroke-width="1.5"/>
+      <rect x="29" y="13.5" width="5" height="4" rx="1" fill="#bfdbfe"/>
+      <rect x="4" y="4" width="12" height="5" rx="1" fill="${body}" stroke="#fff" stroke-width="1"/>
+      <circle cx="10" cy="23" r="4" fill="#1f2937" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="32" cy="23" r="4" fill="#1f2937" stroke="#fff" stroke-width="1.5"/>
+      <rect x="18" y="1" width="6" height="3" rx="1" fill="#fbbf24"/>
+    </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg.trim());
+}
+
 // Consider "offline" if last GPS update was more than 5 minutes ago
 function isOffline(lastLocationAt) {
   if (!lastLocationAt) return true;
@@ -83,21 +110,20 @@ function isOffline(lastLocationAt) {
 }
 
 function getMarkerColor(user) {
-  if (isOffline(user.last_location_at) && user.status === 'Safe') return '#9ca3af'; // gray for offline
+  if (isOffline(user.last_location_at)) return '#9ca3af'; // gray — offline (any status)
   if (user.status === 'Need_Assistance') return '#f59e0b'; // orange
   if (user.status === 'In_Danger') return '#ef4444'; // red
   return '#10b981'; // green for online + safe
 }
 
 function getStatusLabel(user) {
-  const offline = isOffline(user.last_location_at);
+  if (isOffline(user.last_location_at)) return 'Offline';
   if (user.status === 'Need_Assistance') return 'Need Help';
   if (user.status === 'In_Danger') return 'In Danger';
-  if (offline) return 'Offline';
   return 'Online · Safe';
 }
 
-export default function GoogleMapView({ evacuees = [], centers = [], zoom = 13, filterBarangay = null, onHallClick = null }) {
+export default function GoogleMapView({ evacuees = [], centers = [], rescuers = [], zoom = 13, filterBarangay = null, onHallClick = null, hideOfflineEvacuees = false }) {
   const { isLoaded } = useJsApiLoader({ id: 'google-map', googleMapsApiKey: GOOGLE_MAPS_API_KEY });
   const mapRef = useRef(null);
   const hasFittedRef = useRef(false);
@@ -191,22 +217,41 @@ export default function GoogleMapView({ evacuees = [], centers = [], zoom = 13, 
         ],
       }}
     >
-      {/* Evacuee markers */}
+      {/* Evacuee (user) markers — human icon colored by status.
+          When hideOfflineEvacuees is set, offline users are removed from the map. */}
       {enrichedEvacuees.map((u) => {
         if (!u.latitude || !u.longitude) return null;
+        if (hideOfflineEvacuees && isOffline(u.last_location_at)) return null;
         return (
           <Marker
             key={`user-${u.id}`}
             position={{ lat: u.latitude, lng: u.longitude }}
             onClick={() => setSelectedMarker(u)}
             icon={{
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: getMarkerColor(u),
-              fillOpacity: 1,
-              strokeColor: '#fff',
-              strokeWeight: 2.5,
+              url: personIcon(getMarkerColor(u)),
+              scaledSize: new window.google.maps.Size(30, 38),
+              anchor: new window.google.maps.Point(15, 38),
             }}
+            zIndex={20}
+          />
+        );
+      })}
+
+      {/* Rescuer markers — firetruck icon */}
+      {rescuers.map((r) => {
+        if (r.latitude == null || r.longitude == null) return null;
+        const responding = r.status === 'Responding';
+        return (
+          <Marker
+            key={`rescuer-${r.id}`}
+            position={{ lat: r.latitude, lng: r.longitude }}
+            onClick={() => setSelectedMarker({ ...r, _isRescuer: true })}
+            icon={{
+              url: firetruckIcon(responding),
+              scaledSize: new window.google.maps.Size(42, 30),
+              anchor: new window.google.maps.Point(21, 30),
+            }}
+            zIndex={30}
           />
         );
       })}
@@ -358,6 +403,27 @@ export default function GoogleMapView({ evacuees = [], centers = [], zoom = 13, 
                 <p style={{ fontSize: 11, color: '#0d9488', marginTop: 3 }}>
                   📍 {selectedMarker.lat.toFixed(5)}, {selectedMarker.lng.toFixed(5)}
                 </p>
+              </>
+            ) : selectedMarker._isRescuer ? (
+              <>
+                <p style={{ fontWeight: 700, fontSize: 14, color: '#1e293b', marginBottom: 4 }}>🚒 {selectedMarker.name}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: selectedMarker.status === 'Responding' ? '#dc2626' : '#10b981', display: 'inline-block' }}></span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: selectedMarker.status === 'Responding' ? '#dc2626' : '#10b981' }}>
+                    {selectedMarker.status === 'Responding' ? 'Responding to rescue' : 'Available'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <span>Barangay: {selectedMarker.barangay_name || '—'}</span>
+                  {selectedMarker.evacuee_name && (
+                    <span style={{ color: '#2563eb', fontWeight: 500 }}>Evacuee: {selectedMarker.evacuee_name}</span>
+                  )}
+                </div>
+                {selectedMarker.last_location_at && (
+                  <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+                    Last update: {new Date(selectedMarker.last_location_at).toLocaleString()}
+                  </p>
+                )}
               </>
             ) : (
               <>

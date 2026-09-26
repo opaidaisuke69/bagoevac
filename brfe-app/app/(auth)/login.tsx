@@ -4,12 +4,14 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
   Image, Animated,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useNavigationContainerRef } from 'expo-router';
+import { CommonActions } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '@/constants/config';
 import { setToken, setRole } from '@/hooks/use-auth';
 
 export default function LoginScreen() {
+  const navigationRef = useNavigationContainerRef();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword]     = useState('');
   const [error, setError]           = useState('');
@@ -63,10 +65,16 @@ export default function LoginScreen() {
         setError(`Server error (${res.status}). Please try again.`);
         return;
       }
+      if (res.status === 503 || data.code === 'MAINTENANCE') {
+        setError('System Currently Down. Please try again later.');
+        return;
+      }
       if (data.error) { setError(data.message ?? 'Invalid credentials.'); return; }
       await setToken(data.token);
       await setRole('evacuee');
-      router.replace('/(app)/map');
+      navigationRef.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: '(app)', params: { screen: 'map' } }] })
+      );
     } catch {
       setError('Network error. Check your connection.');
     } finally {
@@ -135,6 +143,10 @@ export default function LoginScreen() {
           </View>
         </View>
 
+        <TouchableOpacity style={styles.forgotLink} onPress={() => router.push('/(auth)/forgot-password')}>
+          <Text style={styles.forgotText}>Forgot password?</Text>
+        </TouchableOpacity>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleLogin} disabled={loading}>
@@ -173,6 +185,8 @@ const styles = StyleSheet.create({
   inputIcon:        { marginLeft: 12 },
   input:            { flex: 1, paddingHorizontal: 10, paddingVertical: 12, fontSize: 15, color: '#111827' },
   eyeBtn:           { padding: 10 },
+  forgotLink:       { alignSelf: 'flex-end', marginTop: -4, marginBottom: 14 },
+  forgotText:       { fontSize: 13, color: '#2563eb', fontWeight: '700' },
   error:            { color: '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center', fontWeight: '500' },
   button:           { backgroundColor: '#2563eb', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 4, marginBottom: 16, elevation: 3, shadowColor: '#2563eb', shadowOpacity: 0.4, shadowRadius: 8 },
   buttonDisabled:   { backgroundColor: '#93c5fd', elevation: 0 },

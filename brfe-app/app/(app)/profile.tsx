@@ -6,11 +6,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useNavigationContainerRef } from "expo-router";
+import { CommonActions } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../../constants/config";
 import { getToken, clearToken } from "../../hooks/use-auth";
-import { router } from "expo-router";
 import * as WsClient from "../../services/websocket-client";
+
+const PROFILE_CACHE_KEY = "brfe_profile_cache";
 
 interface UserProfile {
   id: number; full_name: string; username: string | null; email: string | null;
@@ -28,8 +31,10 @@ const STATUS_CFG: Record<string, { bg: string; text: string; border: string; lab
 type Section = "view" | "edit" | "password";
 
 export default function ProfileScreen() {
+  const navigationRef = useNavigationContainerRef();
   const [profile, setProfile]   = useState<UserProfile | null>(null);
   const [loading, setLoading]   = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [section, setSection]   = useState<Section>("view");
   const [avatarUploading, setAvatarUploading] = useState(false);
 
@@ -59,10 +64,12 @@ export default function ProfileScreen() {
       const token = await getToken();
       if (!token) { doLogout(); return; }
       const res  = await fetch(`${API_BASE_URL}/api/users/get`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.status === 401) { doLogout(); return; }
       const json = await res.json();
-      if (json.error) { if (json.status === 401) doLogout(); return; }
+      if (json.error) return;
       const data: UserProfile = json.data ?? json;
       setProfile(data);
+      setIsOffline(false);
       setFullName(data.full_name ?? "");
       setUsername(data.username ?? "");
       setEmail(data.email ?? "");
@@ -70,7 +77,26 @@ export default function ProfileScreen() {
       setAddress(data.address ?? "");
       setEmergName(data.emerg_name ?? "");
       setEmergNo(data.emerg_no ?? "");
-    } catch { /* non-fatal */ } finally { setLoading(false); }
+      // Cache profile for offline use
+      await AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
+    } catch {
+      // Network error — try loading from cache
+      try {
+        const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+        if (cached) {
+          const data: UserProfile = JSON.parse(cached);
+          setProfile(data);
+          setIsOffline(true);
+          setFullName(data.full_name ?? "");
+          setUsername(data.username ?? "");
+          setEmail(data.email ?? "");
+          setAge(String(data.age ?? ""));
+          setAddress(data.address ?? "");
+          setEmergName(data.emerg_name ?? "");
+          setEmergNo(data.emerg_no ?? "");
+        }
+      } catch { /* cache read failed, profile stays null */ }
+    } finally { setLoading(false); }
   }, []);
 
   // Re-fetch every time the profile tab is focused
@@ -95,7 +121,9 @@ export default function ProfileScreen() {
 
   async function doLogout() {
     await clearToken();
-    router.replace("/(auth)/login");
+    navigationRef.dispatch(
+      CommonActions.reset({ index: 0, routes: [{ name: '(auth)', params: { screen: 'login' } }] })
+    );
   }
 
   async function pickAvatar() {
@@ -264,6 +292,13 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
+        {isOffline && (
+          <View style={s.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#92400e" />
+            <Text style={s.offlineTxt}>You're offline. Showing cached profile.</Text>
+          </View>
+        )}
+
         {/* VIEW */}
         {section === "view" && (
           <>
@@ -418,6 +453,8 @@ const s = StyleSheet.create({
   contactLine: { fontSize: 13, color: "rgba(255,255,255,0.75)" },
   backRow:     { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingBottom: 8 },
   backTxt:     { fontSize: 14, color: "#1d4ed8", fontWeight: "700" },
+  offlineBanner: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#fef3c7", borderWidth: 1, borderColor: "#fde68a", borderRadius: 10, marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  offlineTxt:  { fontSize: 13, color: "#92400e", fontWeight: "600", flex: 1 },
   card:        { backgroundColor: "#fff", borderRadius: 18, padding: 18, marginHorizontal: 16, marginBottom: 12, elevation: 2, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 10 },
   cardHead:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
   cardTitle:   { fontSize: 16, fontWeight: "800", color: "#1e293b" },

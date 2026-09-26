@@ -28,3 +28,19 @@ export async function getRole(): Promise<string | null> {
 export async function setRole(role: string): Promise<void> {
   await AsyncStorage.setItem(ROLE_KEY, role);
 }
+
+/** Decode the (unverified) JWT payload stored for this session. */
+export async function getTokenPayload(): Promise<Record<string, any> | null> {
+  const token = await getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    base64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    // atob is available in React Native's Hermes runtime.
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}

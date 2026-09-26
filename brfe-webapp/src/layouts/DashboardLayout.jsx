@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, LifeBuoy, Building2,
   BarChart3, MessageCircle, LogOut, Menu, PanelLeftClose, PanelLeft,
-  Shield, Megaphone, UserPlus, Eye,
+  Shield, Radio, UserPlus, Eye, FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { cn } from '../lib/utils';
@@ -29,13 +29,14 @@ const lguNavSections = [
     label: 'Operations',
     items: [
       { to: '/lgu/centers', icon: Building2, label: 'Evac Centers' },
-      { to: '/lgu/announcements', icon: Megaphone, label: 'Announcements' },
+      { to: '/lgu/broadcast', icon: Radio, label: 'Broadcast' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { to: '/lgu/accounts', icon: UserPlus, label: 'Manage Accounts' },
+      { to: '/lgu/accounts', icon: UserPlus, label: 'Accounts' },
+      { to: '/lgu/generate-reports', icon: FileText, label: 'Generate Reports' },
     ],
   },
 ];
